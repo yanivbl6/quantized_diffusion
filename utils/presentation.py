@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import math
 import os 
 from PIL import Image
+import wandb
+import numpy as np
 
 def from_dir(directory):
 
@@ -17,10 +19,19 @@ def from_dir(directory):
 
 
 def plot_grid(name, images, directory = "images", title = None):
+
+
+
     samples = len(images)
+    if samples > 64:
+        images = images[:64]
+        samples = 64
+
 
     n = math.ceil(math.sqrt(samples))
     m = math.ceil(samples/n)
+
+
 
     maxnm = max(n,m)
     img_size  = 30//maxnm
@@ -114,3 +125,73 @@ def plot_hybrid_grid(name, runs, idxes=0,directory = "images"):
         pass
 
     plt.close()
+
+
+
+class WandbRuns:
+    _runs = None
+
+    @classmethod
+    def get_runs(cls, path):
+        if cls._runs is None:
+            api = wandb.Api()
+            cls._runs = api.runs(path)
+        return cls._runs
+
+
+def plot_lines(path = "dl-projects/qpipe_scores", baseline = False, 
+                count = 256, dtype = "M2E5", filter = lambda x: True,
+                label = "", field = "clip_score_mean"):
+    
+
+
+    runs = WandbRuns.get_runs(path)
+
+    names = [run.name for run in runs]
+
+    mruns = []
+    for run in runs:
+
+        if not 'count' in run.summary or run.summary['count'] != count:
+            continue
+
+        if baseline:
+            if "M23E8" in run.name: 
+                if run.name == "M23E8_V3":
+                    y_bl = run.summary[field]
+                    dy_bl = run.summary[field + "_std"]
+
+                
+        if dtype in run.name:
+            if filter(run.name):
+                mruns.append(run)
+            
+
+
+
+    y = np.zeros(len(mruns))
+    dy = np.zeros(len(mruns))
+
+    x = np.zeros(len(mruns))
+
+    for i, run in enumerate(mruns):
+        df = run.summary
+        y[i] = df[field]
+        dy[i] = df[field + "_std"]
+        x[i] = run.config['num_inference_steps']
+
+
+    ## sory x, y, dy according to x:
+    idx = np.argsort(x)
+    x = x[idx]
+    y = y[idx]
+    dy = dy[idx]
+
+    plt.fill_between(x, y-dy, y+dy, alpha=0.6, label=label)
+    plt.plot(x, y)
+
+    if baseline:
+        y_bl = np.asarray([y_bl] * len(x))
+        dy_bl = np.asarray([dy_bl] * len(x))
+        plt.fill_between(x, y_bl-dy_bl, y_bl+dy_bl, color='k', alpha=0.2, label="baseline")
+        plt.plot(x, y_bl, color='k')

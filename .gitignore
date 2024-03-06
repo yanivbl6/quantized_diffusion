@@ -1,0 +1,20 @@
+# Jupyter Notebook
+*.ipynb
+.ipynb_checkpoints/
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.pdf
+
+# Specified folders
+results/
+images/
+objects/
+wandb/
+__pycache__/
+utils/__pycache__/
+

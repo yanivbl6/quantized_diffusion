@@ -41,7 +41,7 @@ def clip_eval(images, prompt):
 
     prompts = [prompt] * N
 
-    score = clip_score_fn(torch.from_numpy(np_images).permute(0, 3, 1, 2), prompts).detach()
+    score = clip_score_fn(torch.from_numpy(np_images).permute(0, 3, 1, 2).cuda(), prompts).detach()
     return round(float(score), 4)
 
 def clip_eval_std(images, prompt,splits=4, type = "base"):
