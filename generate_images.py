@@ -26,9 +26,11 @@ parser.add_argument('-R', '--repeat_model', type=int, default=1)
 parser.add_argument('--layer_stats', action='store_true')
 parser.add_argument('-I', '--individual_care', action='store_true')
 parser.add_argument('-i','--inspection', action='store_true')
-parser.add_argument('-g','--gamma_threshold', type=float, default=0.001)
+parser.add_argument('-g','--gamma_threshold', type=float, default=1)
 parser.add_argument('-q','--quantized_run', action='store_true')
 parser.add_argument('-Q','--quantization_noise', type=str, default="expexp")
+parser.add_argument('-E', '--use_quantized_euler', action='store_true')
+
 
 parser.add_argument('--name', type=str, default="")
 parser.add_argument('--device', type=int, default=0)
@@ -44,6 +46,9 @@ if __name__ == "__main__":
 
     if args.weight_quant is None:
         args.weight_quant = args.fwd_quant
+
+    if args.use_quantized_euler:
+        args.repeat_module = -1
 
     torch.cuda.set_device(args.device)
 

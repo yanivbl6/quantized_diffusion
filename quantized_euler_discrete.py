@@ -134,7 +134,7 @@ def rescale_zero_terminal_snr(betas):
 
 def calculate_gamma(sigma_Q, r):
 
-    term = 1 - sigma_Q**2 * (1 - r) * (1 + r * sigma_Q**2)
+    term = 1 - sigma_Q**2 * (1 - r**2)
     sqrt_term = torch.sqrt(term)
     
     numerator = sqrt_term + (1 - r) * sigma_Q**2 - 1
@@ -409,8 +409,9 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
             device (`str` or `torch.device`, *optional*):
                 The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
         """
-        self.num_inference_steps = num_inference_steps
 
+        self.num_inference_steps = num_inference_steps
+            
         # "linspace", "leading", "trailing" corresponds to annotation of Table 2. of https://arxiv.org/abs/2305.08891
         if self.config.timestep_spacing == "linspace":
             timesteps = np.linspace(0, self.config.num_train_timesteps - 1, num_inference_steps, dtype=np.float32)[
@@ -452,10 +453,12 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
             sigmas = self._convert_to_karras(in_sigmas=sigmas, num_inference_steps=self.num_inference_steps)
             timesteps = np.array([self._sigma_to_t(sigma, log_sigmas) for sigma in sigmas])
 
-
-
-
         sigmas = torch.from_numpy(sigmas).to(dtype=torch.float32, device=device)
+
+
+
+
+
 
         # TODO: Support the full EDM scalings for all prediction types and timestep types
         if self.config.timestep_type == "continuous" and self.config.prediction_type == "v_prediction":
@@ -465,12 +468,29 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         self.sigmas = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
 
+
+
         self.prepare_for_noise(self.quantization_noise, self.gamma_threshold, num_inference_steps, sigmas)
+
+
 
 
 
         self._step_index = None
         self.sigmas.to("cpu")  # to avoid too much CPU/GPU communication
+
+
+
+    def get_adjusted_timesteps(self):
+
+        sigmas = self.sigmas
+        gammas = calculate_gamma(self.quantization_noise[1:], sigmas[1:-1] / sigmas[:-2])
+        ##import pdb; pdb.set_trace()
+        factor = (sigmas[-2] - sigmas[0]) / (sigmas[-2] - sigmas[0] - (gammas * sigmas[:-2]).sum())
+
+        ##num_inference_steps = int(math.ceil(num_inference_steps * factor))
+        num_inference_steps = self.num_inference_steps + 1
+        return num_inference_steps
 
     def _sigma_to_t(self, sigma, log_sigmas):
         # get log sigma
@@ -644,6 +664,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         derivative = (sample - pred_original_sample) / sigma_hat
 
         dt = self.sigmas[self.step_index + 1] - sigma_hat
+
+        ##assert dt > 0, f"dt should be positive, but got {dt}"
 
         prev_sample = sample + derivative * dt
 
