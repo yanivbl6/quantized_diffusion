@@ -4,26 +4,30 @@ import wandb
 
 import os
 
-def interpolate_quantization_noise(fwd_quant, style, n_steps):
+def interpolate_quantization_noise(fwd_quant, style, n_steps, include = ""):
+
+    include="" ## remove me
 
     if fwd_quant == "M23E8" or fwd_quant == "M10E5" or fwd_quant == "M7E8":
         return 0.0
 
-
-
-
-    if n_steps == 40:
-        paths = {"M4": "dl-projects/qpipe/m22a82qa",
-                "M3": "dl-projects/qpipe/9pcbity4",
-                "M2": "dl-projects/qpipe/hiidxu4f"}
-    elif n_steps == 30:
-        paths = {"M4": "dl-projects/qpipe/8rrb80yt",
-                "M3": "dl-projects/qpipe/bca7qs1m",
-                "M2": "dl-projects/qpipe/7xo6mgmm"}
+    if include == "":
+        if n_steps == 40:
+            paths = {"M4": "dl-projects/qpipe/m22a82qa",
+                    "M3": "dl-projects/qpipe/9pcbity4",
+                    "M2": "dl-projects/qpipe/hiidxu4f"}
+        elif n_steps == 30:
+            paths = {"M4": "dl-projects/qpipe/8rrb80yt",
+                    "M3": "dl-projects/qpipe/bca7qs1m",
+                    "M2": "dl-projects/qpipe/7xo6mgmm"}
+        else:
+            paths = {"M4": "dl-projects/qpipe/251jhla0",
+                    "M3": "dl-projects/qpipe/h5w65f23",
+                    "M2": "dl-projects/qpipe/gpamc6dx"}
     else:
-        paths = {"M4": "dl-projects/qpipe/251jhla0",
-                "M3": "dl-projects/qpipe/h5w65f23",
-                "M2": "dl-projects/qpipe/gpamc6dx"}
+        paths = {"M4": "dl-projects/qpipe/urtdzovp",
+                "M3": "dl-projects/qpipe/e5teob1d",
+                "M2": "dl-projects/qpipe/cfsbrumt"}
 
     fwd_quant_m = fwd_quant.split("E")[0]
 
@@ -36,7 +40,10 @@ def interpolate_quantization_noise(fwd_quant, style, n_steps):
     if not os.path.exists(backup_dir):
         os.makedirs(backup_dir)
 
-    fpath = os.path.join(backup_dir, fwd_quant + "_" +  str(n_steps) + ".obj")
+    if include != "":
+        fpath = os.path.join(backup_dir, fwd_quant + "_" +  str(n_steps) + "_" + include + ".obj")
+    else:
+        fpath = os.path.join(backup_dir, fwd_quant + "_" +  str(n_steps) + ".obj")
 
     if not os.path.exists(fpath):
         run = wandb.Api().run(path)

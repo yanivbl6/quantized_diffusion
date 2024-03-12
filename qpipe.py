@@ -1,5 +1,6 @@
-from diffusers import DiffusionPipeline
+from diffusers import DiffusionPipeline, logging
 import torch
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 from qunet import QUNet2DConditionModel
 from quantized_euler_discrete import QuantizedEulerDiscreteScheduler
@@ -18,6 +19,7 @@ import math
 from utils.quantization_interpolation import interpolate_quantization_noise
 from utils.presentation import plot_grid
 from utils.evaluate import *
+from utils.prompts import get_prompt
 
 from PIL import Image
 
@@ -36,7 +38,7 @@ def parse_quant(arg):
         raise ValueError("Invalid quantization format")
 
 
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
 
 
 def base_name(
@@ -52,8 +54,15 @@ def base_name(
     gamma_threshold: float,
     quantization_noise: float,
     name: str,
+    prompt: str,
+    steps: int,
+    include: str,
+    scheduler_noise_mode: str,
     **kwargs,
 ) -> str:
+    
+    name = name + prompt + "x" + str(steps) + "_"
+
     if fwd_quant == weight_quant:
         name = name +  fwd_quant
     else:
@@ -65,12 +74,18 @@ def base_name(
     if weight_flex_bias:
         name += "_flex"
 
-    name = name + "_V4"
+    if include != "" and include != "none" and include != "n":
+        name = name + "_" + include
+
+    if scheduler_noise_mode != "dynamic":
+        name = name + "_SQ_" + scheduler_noise_mode
 
     if repeat_module > 1:
         name += "_x" + str(repeat_module)
     elif repeat_module < 0:
         name += "_adjustedV2"
+
+
 
     elif repeat_module < 0:
         name += "_dynamic"
@@ -81,7 +96,45 @@ def base_name(
     if repeat_model > 1:
         name += "_N" + str(repeat_model)
 
+
+    
+
     return name
+
+
+def parse_include(option: str):
+    option = option.lower()
+    quantize_embedding = False
+    quantize_first = False
+    quantize_last = False
+
+    if option in ["all", "a"]:
+        quantize_embedding = True
+        quantize_first = True
+        quantize_last = True
+    elif option in ["first", "f"]:
+        quantize_first = True
+    elif option in ["last", "l"]:
+        quantize_last = True
+    elif option in ["embedding", "emb", "e"]:
+        quantize_embedding = True
+    elif option in ["none", "n", ""]:
+        pass
+    elif option in ["not_first", "nf"]:
+        quantize_embedding = True
+        quantize_last = True
+    elif option in ["not_last", "nl"]:
+        quantize_embedding = True
+        quantize_first = True
+    elif option in ["not_embedding", "ne"]:
+        quantize_first = True
+        quantize_last = True
+    else:
+        raise ValueError("Invalid include option")
+
+    return quantize_embedding, quantize_first, quantize_last
+
+
 
 
 
@@ -90,8 +143,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               name_or_path_ref = "stabilityai/stable-diffusion-xl-refiner-1.0",
               n_steps = 40,
               high_noise_frac = 0.8,
-              prompt = "A majestic lion jumping from a big stone at night, with star-filled skies. Hyperdetailed, with Complex tropic, African background.",
-              nprompt = "extra limbs",
+              prompt = "lion",
               fwd_quant = FloatingPoint(8, 23),
               weight_quant = FloatingPoint(8, 23),
               weight_flex_bias = False,
@@ -108,15 +160,48 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               quantized_run = True,
               use_wandb = True,
               clip_score = True,
+              calc_mse = False,
+              overwrite = False,
+              height = 1024,
+              width = 1024,
+              include= "",
+              scheduler_noise_mode = "dynamic",
               **kwargs):
     
+
+    quantize_embedding, quantize_first, quantize_last = parse_include(include)
+
+    pprompt, nprompt = get_prompt(prompt)
+
+    quantization_noise_str = ""
     if repeat_module< 0 and isinstance(quantization_noise, str):
-        quantization_noise = interpolate_quantization_noise(fwd_quant, quantization_noise, n_steps)
+        quantization_noise_str = quantization_noise
+        quantization_noise = interpolate_quantization_noise(fwd_quant, quantization_noise, n_steps, include=include)
 
     if isinstance(fwd_quant, str) and isinstance(weight_quant, str):
-        name = base_name(name_or_path, fwd_quant, weight_quant, weight_flex_bias, 
+        name = base_name(name_or_path, fwd_quant, weight_quant, weight_flex_bias,
                          quantized_run, repeat_module, repeat_model, layer_stats, 
-                         individual_care, gamma_threshold, quantization_noise, name, **kwargs) 
+                         individual_care, gamma_threshold, quantization_noise, name,  
+                         prompt, n_steps, include, scheduler_noise_mode,
+                         **kwargs) 
+
+    print("-" * 80)
+    print("Running: ", name)
+
+    log_dir = "logs"
+
+    new_run = True
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    else: 
+        num_files = len([name for name in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, name))])
+        print("exists with ", num_files, " files")
+        new_run = False
+
+    print("-" * 80)
+
+
+    log_file = os.path.join(log_dir, name + ".log")
 
     if not quantized_run and repeat_module < 0:
         fwd_quant = "M23E8"
@@ -147,7 +232,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         base.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(base.scheduler, 
                                                                         quantization_noise = quantization_noise,
                                                                         gamma_threshold = gamma_threshold,
-                                                                        quantized_run = quantized_run)
+                                                                        quantized_run = quantized_run,
+                                                                        quantization_noise_mode = scheduler_noise_mode)
         
         base.scheduler.set_timesteps(n_steps)
 
@@ -177,8 +263,9 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     base.unet = QUNet2DConditionModel.from_unet(base.unet, weight_quant,  weight_flex_bias, qargs, 
                                                 repeat_module, repeat_model, layer_stats, individual_care, 
-                                                timestep_to_repetition1)
-    
+                                                timestep_to_repetition1, calc_mse,
+                                                quantize_embedding, quantize_first, quantize_last)
+
     if inspection:
         return base.unet
 
@@ -186,7 +273,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         refiner.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(refiner.scheduler, 
                                                                            quantization_noise = quantization_noise,
                                                                             gamma_threshold = gamma_threshold,
-                                                                            quantized_run = quantized_run)
+                                                                            quantized_run = quantized_run,
+                                                                            quantization_noise_mode = scheduler_noise_mode)
         refiner.scheduler.set_timesteps(n_steps1)
         timestep_to_repetition2 = refiner.scheduler.make_repetition_plan()
 
@@ -195,7 +283,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     refiner.unet = QUNet2DConditionModel.from_unet(refiner.unet, weight_quant, weight_flex_bias, qargs, 
                                                    repeat_module, repeat_model, layer_stats, individual_care,
-                                                   timestep_to_repetition2)
+                                                   timestep_to_repetition2, calc_mse,
+                                                   quantize_embedding, quantize_first, quantize_last)
 
 
     idx = 0
@@ -213,11 +302,17 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         os.makedirs(subfolder)
 
 
-    for idx in range(samples):
+    logging.set_verbosity(logging.ERROR)
+
+    base.set_progress_bar_config(disable = True)
+    refiner.set_progress_bar_config(disable = True)
+
+    pbar = tqdm(range(samples), desc="Generating images", total = samples)
+    for idx in pbar:
 
         fname = os.path.join(subfolder,  "img_%05d.png" % idx)
 
-        if os.path.exists(fname):
+        if os.path.exists(fname) and not overwrite:
             ## load image from file
             image = Image.open(fname)
             mimages.append(image)
@@ -225,11 +320,12 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
 
         if use_wandb:
-            args= {'prompt': prompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
+            args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
                     'fwd_quant_e': fwd_quant.exp, 'fwd_quant_m': fwd_quant.man, 'weight_quant_e': weight_quant.exp, 'weight_quant_m': weight_quant.man,
                     'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
-                    'idx': idx, 'version': 4, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
-                    'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1}
+                    'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
+                    'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
+                    'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str}
             
             args.update(kwargs)
 
@@ -245,19 +341,23 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         with wandb_entry:
             generator.manual_seed(idx)
             image = base(
-                prompt=prompt,
+                prompt=pprompt,
                 negative_prompt=nprompt,
                 num_inference_steps=n_steps1,
                 denoising_end=high_noise_frac,
                 output_type="latent",
                 generator=generator,
+                height = height,
+                width = width,
             ).images
             image = refiner(
-                prompt=prompt,
+                prompt=pprompt,
                 num_inference_steps=n_steps1,
                 denoising_start=high_noise_frac,
                 image=image,
                 generator=generator,
+                height = height,
+                width = width,
             ).images[0]
 
         
@@ -275,11 +375,12 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         plot_grid(name, mimages, title = title)
 
 
-    args= {'prompt': prompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
+    args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
             'fwd_quant_e': fwd_quant.exp, 'fwd_quant_m': fwd_quant.man, 'weight_quant_e': weight_quant.exp, 'weight_quant_m': weight_quant.man,
             'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
-            'idx': idx, 'version': 2.1, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
-            'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run}
+            'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
+            'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
+            'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str}
     
     args.update(kwargs)
 
@@ -293,26 +394,35 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     
     torch.cuda.empty_cache()
 
-    if clip_score and samples > 4:
-        with wandb.init(project="qpipe_scores", entity= 'dl-projects', name=name, config=args):
-            calc_score = clip_eval(mimages, prompt)
-            calc_score_large = clip_eval_large(mimages, prompt)
+        
 
+
+
+
+    if clip_score and samples > 4:
+
+        with wandb.init(project="qpipe_scores", entity= 'dl-projects', name=name, config=args):
 
             splits = 16 if len(mimages) > 64 else 4
             IS_mean, IS_std = inception_score(mimages,splits = splits) 
 
-            clip_score_mean, clip_score_mean_std  = clip_eval_std(mimages, prompt, splits = splits)
+            clip_score_mean, clip_score_mean_std  = clip_eval_std(mimages, pprompt, splits = splits)
+            clip_score_large_mean, clip_score_large_std  = clip_eval_std(mimages, pprompt, splits = splits, type = "large")
+            pickapick_mean, pickapick_std = eval_pickapick(subfolder, pprompt, batch_size=4)
 
-            wandb.log({"clip_score": calc_score, 
-                       'count': len(mimages),
-                       'clip_score_large': calc_score_large,
-                       'IS': IS_mean,
-                       'IS_std': IS_std,
-                       'clip_score_mean': clip_score_mean,
-                       'clip_score_mean_std': clip_score_mean_std,
+            wandb.log({'count': len(mimages),
+                        'clip_score_large': clip_score_large_mean,
+                        'clip_score_large_std': clip_score_large_std,
+                        'IS': IS_mean,
+                        'IS_std': IS_std,
+                        'clip_score_mean': clip_score_mean,
+                        'clip_score_mean_std': clip_score_mean_std,
+                        'pickapick': pickapick_mean,
+                        'pickapick_std': pickapick_std,
                        })
-            print("CLIP score: ", calc_score)
+            print("CLIP score: ", clip_score_mean, "±", clip_score_mean_std)
+            print("CLIP score large: ", clip_score_large_mean, "±", clip_score_large_std)
+            print("Inception score: ", IS_mean, "±", IS_std)
 
     return mimages
 

@@ -214,6 +214,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         quantization_noise: Optional[Union[torch.Tensor, float]] = None, 
         gamma_threshold: float = 0.0,
         quantized_run: bool = True,
+        quantization_noise_mode: str = "dynamic"
     ):
         if trained_betas is not None:
             self.betas = torch.tensor(trained_betas, dtype=torch.float32)
@@ -267,6 +268,16 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         self.sigmas = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
 
+        quantization_noise_mode_dict = {"dynamic": 0,
+                      "max": 1,
+                      "min": 2,
+                      "average": 3,
+                      "comp_max": 4,
+                      "comp_mean": 5
+                    }
+        assert quantization_noise_mode in quantization_noise_mode_dict, f"quantization_noise_mode should be one of {list(quantization_noise_mode_dict.keys())}"
+        self.quantization_noise_mode = quantization_noise_mode_dict[quantization_noise_mode]
+
         self.is_scale_input_called = False
         self.use_karras_sigmas = use_karras_sigmas
 
@@ -274,17 +285,25 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         self.sigmas.to("cpu")  # to avoid too much CPU/GPU communication
 
 
+
+
+
     @staticmethod
     def from_scheduler(scheduler: EulerDiscreteScheduler, 
                         quantization_noise: Optional[Union[torch.Tensor, float]] = None, 
                         gamma_threshold: float = 0.0,
                         quantized_run: bool = False,
+                        quantization_noise_mode: str = "dynamic"
                         ):
         config = scheduler.config
         config["_class_name"] = "ModifiedEulerDiscreteScheduler"
         config["quantization_noise"] = quantization_noise
         config["gamma_threshold"] = gamma_threshold
         config["quantized_run"] = quantized_run
+
+
+
+        config["quantization_noise_mode"] = quantization_noise_mode
 
         sched = QuantizedEulerDiscreteScheduler.from_config(config)
 
@@ -319,6 +338,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                           num_train_timesteps: int = 1000,
                           sigmas: np.array = None,):
 
+
+
         self.repetitions = torch.ones(num_train_timesteps, dtype=torch.int32)
         if quantization_noise is not None:
             if isinstance(quantization_noise, float):
@@ -336,10 +357,19 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                 tsigmas = sigmas
 
             quantization_noise = quantization_noise.to(tsigmas.device)
+
+            if self.quantization_noise_mode == 1 or self.quantization_noise_mode == 4:
+                quantization_noise[:] = quantization_noise.max()
+            elif self.quantization_noise_mode == 2:
+                quantization_noise[:] = quantization_noise.min()
+            elif self.quantization_noise_mode == 3 or self.quantization_noise_mode == 5:
+                quantization_noise[:] = quantization_noise.mean()
+
             self.repetitions = self.repetitions.to(tsigmas.device)
 
             sigma_ratio = tsigmas[1:] / tsigmas[:-1]
             sigma_ratio = torch.cat([sigma_ratio, torch.tensor([0.0], device = sigma_ratio.device)])
+
 
             gammas = calculate_gamma(quantization_noise, sigma_ratio)
 
@@ -355,6 +385,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         if not self.quantized_run: ##simulates the noise, no quantization and no need for repetitions
             self.repetitions = torch.ones(num_train_timesteps, dtype=torch.int32)
+
+
 
 
     @property
@@ -474,7 +506,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
 
 
-
+        ##self.estimate_needed_steps() ## <----- UNTESTED
 
         self._step_index = None
         self.sigmas.to("cpu")  # to avoid too much CPU/GPU communication
@@ -629,7 +661,27 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         gamma = self.gammas[self.step_index]
 
 
+        # desired_noise_factor = 0.0
+        # if self.quantized_run and not self.complement_noise:
+        #     noise = 0.0
+        # else:
+        #     if self.complement_noise:
+        #         desired_sigma_hat = self.desired_gamma[self.step_index] * (gamma + 1)
+        #         desired_noise_factor = (desired_sigma_hat**2 - sigma**2) ** 0.5
 
+        #         if noise_factor > desired_noise_factor:
+        #             noise_factor = noise_factor - desired_noise_factor
+        #         else:
+        #             noise_factor = 0.0
+                
+        #     noise = randn_tensor(
+        #         model_output.shape, dtype=model_output.dtype, device=model_output.device, generator=generator
+        #     )
+
+        # eps = noise * s_noise
+
+        # if gamma > 0:
+        #     sample = sample + eps * noise_factor
 
 
         if self.quantized_run:
@@ -700,6 +752,33 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         return EulerDiscreteSchedulerOutput(prev_sample=prev_sample, pred_original_sample=pred_original_sample)
 
+
+    def estimate_needed_steps(self):
+
+
+        ##import pdb; pdb.set_trace()
+
+        sigmas = self.sigmas
+        sigma_Q = self.quantization_noise[:-1]
+
+        gammas = calculate_gamma(self.quantization_noise, sigmas[1:] / sigmas[:-1])
+
+        sigma_hats = sigmas * (gammas + 1)
+        N = self.num_inference_steps
+        dt0 = sigmas[0] - sigmas[-1]
+        dti = sigmas[:-1] - sigma_hats[1:]
+
+
+
+        ##\hat{N}=N\left(1+\frac{1}{2\Delta t_{0}}\sum_{i}\frac{\sigma_{Q,i}^{2}}{\sigma_{i}}\left(\Delta t_{i}\right)^{2}\right)
+
+        N_hat = N * (1 + 1 / (2 * dt0) * (sigma_Q**2 / sigmas[:-1] * dti**2).sum())
+        sigma_Q_max = self.quantization_noise.max()
+        N_hat_max = N * (1 + 1 / (2 * dt0) * (sigma_Q_max**2 / sigmas[:-1] * dti**2).sum())
+
+        print("N_hat: ", N_hat)
+        print("N_hat_max: ", N_hat_max)
+        ##num_inference_steps = int(math.ceil(num_inference_steps * factor))
 
 
     def add_noise(

@@ -56,134 +56,21 @@ from diffusers.models.resnet import Downsample2D, FirDownsample2D, FirUpsample2D
 
 
 from diffusers.models import UNet2DConditionModel
-from quant import make_block_quantizer, make_weight_quantizer, QAttnProcessor2_0
+from utils.quant import make_block_quantizer, make_weight_quantizer, QAttnProcessor2_0
 from QPyTorch.qtorch import Number, FixedPoint, BlockFloatingPoint, FloatingPoint
+from utils.repetitions import RepeatModule, RepeatModuleStats, Qop, HeavyRepeatModule
 
 from typing import Callable
 
+
+
 import wandb
+
+
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
-class Qop(torch.nn.Sequential):
-    def __init__(self, op, quant_op):
-        super(Qop, self).__init__()
-        self.op = op
-        self.quant_op = quant_op
-
-    def forward(self, x, scale = 1.0):
-        assert scale == 1.0, "Quantized forward pass does not support scaling"
-        x = self.quant_op(x)
-        x = self.op.forward(x)
-        return x
-
-class RepeatModule(torch.nn.Module):
-    def __init__(self, op, num_iter = 1, name = ""):
-        super(RepeatModule, self).__init__()
-        self.op = op
-        self.num_iter = num_iter
-        self.name = name
-        self.outtype = None
-    def forward(self, x, *args, **kwargs):
-
-        
-        out = self.op.forward(x, *args, **kwargs)
-        
-        for _ in range(1, self.num_iter):
-            out_i = self.op.forward(x, *args, **kwargs)
-            if isinstance(out, tuple):
-                out = tuple([o + oi for o, oi in zip(out, out_i)])
-            else:
-                out = out + out_i
-
-        if isinstance(out, tuple):
-            out = tuple([o / self.num_iter for o in out])
-        else:
-            out = out / self.num_iter
-    
-        return out
-
-
-
-class RepeatModuleStats(torch.nn.Module):    
-    op = None
-    n = 1
-    name = ""
-    final = False
-
-    def __init__(self, op, num_iter = 1, name = "", final = False, idx = 0):
-        super(RepeatModuleStats, self).__init__()
-        self.exec_op = op
-        self.num_iter = num_iter
-        self.mname = name
-        self.final_log = final
-        self.idx = idx
-
-    def forward(self, x, *args, **kwargs):
-        out = self.exec_op.forward(x, *args, **kwargs)
-        if isinstance(out, tuple):
-            out_sum_squares = out[0] ** 2 
-        elif isinstance(out, BaseOutput):
-            out_sum_squares = out.sample ** 2
-        else:
-            out_sum_squares = out ** 2
-
-        for _ in range(1, self.num_iter):
-            out_i = self.exec_op.forward(x, *args, **kwargs)
-            if isinstance(out, tuple):
-                out_sum_squares += out_i[0] ** 2
-                out = tuple([o + oi for o, oi in zip(out, out_i)])
-            elif isinstance(out, BaseOutput):
-                out.sample = out.sample + out_i.sample
-                out_sum_squares += out.sample ** 2
-            else:
-                out += out_i
-                out_sum_squares += out_i ** 2
-
-        if isinstance(out, tuple):
-            out = tuple([o / self.num_iter for o in out])
-            variance = ((out_sum_squares / self.num_iter) - out[0] ** 2)
-            standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out[0] ** 2)
-        elif isinstance(out, BaseOutput):
-            out.sample = out.sample / self.num_iter
-            variance = ((out_sum_squares / self.num_iter) - out.sample ** 2)
-            standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out.sample ** 2)
-        else:
-            out = out / self.num_iter
-            variance = ((out_sum_squares / self.num_iter) - out ** 2) 
-            standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out ** 2)
-        
-        variance = variance.mean()
-        standard_deviation = standard_deviation.mean()
-        variance_normalized = variance_normalized.mean()
-        if wandb.run is not None:
-            wandb.log({self.mname + "_variance": variance_normalized.item(), 
-                       self.mname + "_Variance": variance.item(),
-                       self.mname + "_Std": variance.sqrt().item(),
-                       self.mname + "_standard_deviation": standard_deviation.item(),
-                       "layer_index": self.idx}, 
-                       commit = self.final_log)
-                    
-        return out
-
-    ## make sure that all other methods are passed to self.op:
-
-
-    def __getattr__(self, attr):
-        if 'exec_op' in self.__dict__:
-            return getattr(self.exec_op, attr)
-        else:
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attr}'")
-        
-    def __setattr__(self, attr, value):
-        if 'exec_op' in self.__dict__:
-            setattr(self.exec_op, attr, value)
-        else:
-            self.__dict__[attr] = value
 
 @dataclass
 class UNet2DConditionOutput(BaseOutput):
@@ -759,6 +646,10 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   layer_stats: bool = False,
                   individual_care: bool = False,
                   timestep_to_repetition: Optional[Dict[float, int]] = None,
+                  calc_mse: bool = False,
+                  quantize_embedding: bool = False,
+                  quantize_first: bool = False,
+                  quantize_last: bool = False,
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -779,7 +670,16 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         qnet = qnet.to(dtype=dtype)
         qnet.qargs = qargs
 
-        exclude = ["conv_in", "embedding", "conv_out", "conv_norm", "time_emb"]
+        exclude = []
+        if not quantize_embedding:
+            exclude = exclude + ["embedding", "time_emb"]
+
+        if not quantize_first:
+            exclude = exclude + ["conv_in"]
+        
+        if not quantize_last:
+            exclude = exclude + ["conv_out", "conv_norm"]
+
 
         qnet.to(device=unet.device)
         qnet.quantize_all_weights(weight_quant = weight_quant, weight_flex_bias= weight_flex_bias, exclude=exclude)
@@ -802,12 +702,18 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         assert not nested, "Nested repeat modules are not supported."
 
         if repeat_model_count > 1:
-            qnet = RepeatModuleStats(qnet, repeat_model_count, "qnet", True) 
+            if calc_mse:
+                ## must come after check_for_nested_repeat_module_count and quantize_all_gemm_operations
+                qnet = HeavyRepeatModule(qnet, repeat_model_count, "qnet", True)
+            else:
+                qnet = RepeatModuleStats(qnet, repeat_model_count, "qnet", True) 
             ## final = false since we do the commit in the scheduler
 
 
         qnet.timestep_to_repetition = timestep_to_repetition
         qnet.last_repetition_count = repeat_model_count
+
+
         return qnet
 
     def quantize_all_weights(self, weight_quant: FloatingPoint, weight_flex_bias: bool, exclude: List[str] = []):
@@ -834,6 +740,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
 
     def quantize_all_gemm_operations(self, qargs: Dict[str, Any] = None, exclude: List[str] = []):
+
+        self.attn_list = []
         for name, module in self.named_modules():
             if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
                 flag = True
@@ -857,7 +765,9 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             elif isinstance(module, Attention):
                 new_processor =  QAttnProcessor2_0()
                 module.quantizer = make_block_quantizer(**qargs)
+                module.enabled = True
                 setattr(module, 'processor', new_processor)
+                self.attn_list.append(module)
 
     def move_computation_modules_to_repeat_module_count(self, repeat_module_count: int, 
                                                         layer_stats: bool = False):
@@ -879,6 +789,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             for class_to_include in include:
                 if isinstance(module, class_to_include):
                     ##new_module = torch.nn.Sequential(quant, module)
+
                     if not layer_stats:
                         repeat_module = RepeatModule(module, repeat_module_count, name)
                     else:
@@ -903,7 +814,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         """
 
         wrapped_qops = []
-        qops = []
+        self.quantize_op_list = []
+        qpos = []
         nested_repeats = False
         repeat_counter = 0
         for name1, module in self.named_modules():
@@ -918,25 +830,29 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                     elif isinstance(sub_module, Qop):
                         wrapped_qops.append(f"{name1}.{name2}")
             elif isinstance(module, Qop):
-                qops.append(name1)
+                qpos.append(name1)
+                assert hasattr(module, 'quant_op'), f"Qop {name1} does not have a quant_op attribute"
+                self.quantize_op_list.append(module.quant_op)
 
-        for name in qops:
-            if not name in wrapped_qops:
-                # Split the name by dots to navigate the attribute structure
-                name_parts = name.split('.')
-                sub_module = self
-                for part in name_parts[:-1]:
-                    sub_module = getattr(sub_module, part)
+        if self.dynamic_repeats or repeat_module_count > 1:
+            for name in qpos:
+                if not name in wrapped_qops:
+                    # Split the name by dots to navigate the attribute structure
+                    name_parts = name.split('.')
+                    sub_module = self
+                    for part in name_parts[:-1]:
+                        sub_module = getattr(sub_module, part)
 
-                the_module = getattr(sub_module, name_parts[-1])
-                if not layer_stats:
-                    repeat_module = RepeatModule(the_module, repeat_module_count, name)
-                else:
-                    repeat_module = RepeatModuleStats(the_module, repeat_module_count, name, False, repeat_counter)
-                    repeat_counter += 1
-                # Set the new module at the correct location
-                setattr(sub_module, name_parts[-1], repeat_module)
-                self.repeat_modules_list.append(repeat_module)
+                    the_module = getattr(sub_module, name_parts[-1])
+                    if not layer_stats:
+                        repeat_module = RepeatModule(the_module, repeat_module_count, name)
+                    else:
+                        repeat_module = RepeatModuleStats(the_module, repeat_module_count, name, False, repeat_counter)
+                        repeat_counter += 1
+                    # Set the new module at the correct location
+                    setattr(sub_module, name_parts[-1], repeat_module)
+                    self.repeat_modules_list.append(repeat_module)
+                    
 
         return nested_repeats
 
@@ -947,6 +863,9 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         """
         for repeat_module in self.repeat_modules_list:
             repeat_module.num_iter = repeat_module_count
+
+
+            
 
 
     def get_repetition_at_timestep(self, timesteps: torch.tensor):

@@ -83,9 +83,10 @@ class QAttnProcessor2_0:
         key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
-        key = attn.quantizer(key)
-        value = attn.quantizer(value)
-        query = attn.quantizer(query)
+        if attn.enabled:
+            key = attn.quantizer(key)
+            value = attn.quantizer(value)
+            query = attn.quantizer(query)
 
         # the output of sdp = (batch, num_heads, seq_len, head_dim)
         # TODO: add support for attn.scale when we move to Torch 2.1
@@ -132,7 +133,13 @@ class Quantizer(nn.Module):
 
         self.qdrop = qdrop
         self.use_qdrop = qdrop > 0.0
+
+        self.on = True
     def forward(self, x, dim = None):
+
+        if not self.on:
+            return x
+
         if self.use_qdrop and self.training:
             x_ = x.clone()
             mask = (torch.rand_like(x) > self.qdrop).float()
@@ -182,6 +189,13 @@ class Quantizer(nn.Module):
             out = mask*out + (1-mask)*x_
 
         return out
+    
+    def enable(self):
+        self.on = True
+
+    def disable(self):
+        self.on = False
+
     
 def make_weight_quantizer(weights_number: FloatingPoint = FloatingPoint(8, 23), weight_flex_bias: bool = False):
 
