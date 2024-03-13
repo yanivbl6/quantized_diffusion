@@ -5,6 +5,7 @@ from qunet import QUNet2DConditionModel
 from diffusers.models import UNet2DConditionModel
 from QPyTorch.qtorch import BlockFloatingPoint, FixedPoint, FloatingPoint
 from qpipe import *
+import collapse_test
 
 import logging
 import wandb
@@ -40,6 +41,7 @@ parser.add_argument('-S','--scheduler_noise_mode', type=str, default="dynamic")
 
 parser.add_argument('--wandb', action='store_true')
 
+parser.add_argument('--mode_collapse_experiment', type=float, default=None)
 
 ##main
 
@@ -72,13 +74,28 @@ if __name__ == "__main__":
     height, width = parse_resolution(args.resolution)
 
 
-    image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
-                    fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 
-                    samples=args.samples, n_steps = args.n_steps, name = args.name,
-                    repeat_module = args.repeat_module, repeat_model = args.repeat_model, use_wandb=args.wandb,
-                    layer_stats = args.layer_stats, individual_care = args.individual_care, inspection = args.inspection,
-                    prompt = args.prompt, high_noise_frac = args.high_noise_frac,
-                    calc_mse= args.mse, overwrite = args.overwrite,
-                    height = height, width = width, include = args.include,
-                    scheduler_noise_mode=args.scheduler_noise_mode,
-                    **kwargs)
+    if args.mode_collapse_experiment is None:
+
+        image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
+                        fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 
+                        samples=args.samples, n_steps = args.n_steps, name = args.name,
+                        repeat_module = args.repeat_module, repeat_model = args.repeat_model, use_wandb=args.wandb,
+                        layer_stats = args.layer_stats, individual_care = args.individual_care, inspection = args.inspection,
+                        prompt = args.prompt, high_noise_frac = args.high_noise_frac,
+                        calc_mse= args.mse, overwrite = args.overwrite,
+                        height = height, width = width, include = args.include,
+                        scheduler_noise_mode=args.scheduler_noise_mode,
+                        **kwargs)
+    
+    else:
+        collapse_test.run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
+                        fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 
+                        samples=args.samples, n_steps = args.n_steps, name = args.name,
+                        repeat_module = args.repeat_module, repeat_model = args.repeat_model, use_wandb=args.wandb,
+                        layer_stats = args.layer_stats, individual_care = args.individual_care, inspection = args.inspection,
+                        prompt = args.prompt, high_noise_frac = args.high_noise_frac,
+                        calc_mse= args.mse, overwrite = args.overwrite,
+                        height = height, width = width, include = args.include,
+                        scheduler_noise_mode=args.scheduler_noise_mode,
+                        alpha = args.mode_collapse_experiment,
+                        **kwargs)

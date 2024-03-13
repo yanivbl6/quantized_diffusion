@@ -24,7 +24,6 @@ from diffusers import DiffusionPipeline
 
 memory = Memory(location="/tmp", verbose=0)
 
-
 def from_dir(directory):
 
     images = []
