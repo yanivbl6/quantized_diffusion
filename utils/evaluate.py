@@ -21,8 +21,10 @@ from scipy.fftpack import dct, idct
 from joblib import Memory
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import retrieve_latents
 from diffusers import DiffusionPipeline
+from skimage.metrics import structural_similarity
 
-memory = Memory(location="/tmp", verbose=0)
+memory = Memory(location="/tmp/mem", verbose=0)
+##memory = Memory(location=None, verbose=0)
 
 
 def from_dir(directory):
@@ -71,10 +73,11 @@ def diff_eval(baseline, images, fn = None):
         cast_fn = lambda x: x.cpu().numpy()
 
     baseline_np = cast_fn(baseline)
-        
+    
+    ##baseline_np = fn(baseline_np)
+    ##mses = [(np.mean((baseline_np - fn(cast_fn(img))) ** 2)) for img in images]
+    mses = [fn(baseline_np, cast_fn(img)) for img in images]
 
-    baseline_np = fn(baseline_np)
-    mses = [(np.mean((baseline_np - fn(cast_fn(img))) ** 2)) for img in images]
     return mses
 
 
@@ -85,20 +88,24 @@ def diff_eval(baseline, images, fn = None):
 def get_fn_from_desc(fn_desc):
     if fn_desc is None or fn_desc == "pmse":
         fn = lambda x: x
+
+
+        fn = lambda x,y: np.mean((x - y) ** 2)
     elif fn_desc == "dct" or fn_desc == "fmse":
-        fn = lambda x: dct(dct(x, axis=0, norm='ortho'), axis=1, norm='ortho')/10
+        fn1 = lambda x: dct(dct(x, axis=0, norm='ortho'), axis=1, norm='ortho')/10
+        fn = lambda x,y: np.mean((fn1(x) - fn1(y)) ** 2)
     elif fn_desc == "lfmse":
         k = 32
         K = 1024//32
-        fn = lambda x: dct(dct(x, axis=0, norm='ortho'), axis=1, norm='ortho')[:k,:k,:]/(K*10)
+        fn1 = lambda x: dct(dct(x, axis=0, norm='ortho'), axis=1, norm='ortho')[:k,:k,:]/(K*10)
+        fn = lambda x,y: np.mean((fn1(x) - fn1(y)) ** 2)
 
     elif fn_desc == "latent" or fn_desc == "lmse":
-        torch.cuda.set_device('cuda:7')
         name_or_path = "stabilityai/stable-diffusion-xl-base-1.0"
         base = DiffusionPipeline.from_pretrained(
             name_or_path, torch_dtype=torch.float32, use_safetensors=True,
         )
-        vae = base.vae.to('cuda:7')
+        vae = base.vae.cuda()
 
         ##transform int8 image to fp32:
 
@@ -107,17 +114,22 @@ def get_fn_from_desc(fn_desc):
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # Normalize to [-1, 1]
         ])
 
-        fn = lambda x: retrieve_latents(vae.encode(transform(x).cuda().unsqueeze(0))).cpu().detach().numpy()
+        fn1 = lambda x: retrieve_latents(vae.encode(transform(x).cuda().unsqueeze(0)))
+        fn = lambda x,y: torch.mean((fn1(x) - fn1(y)) ** 2).detach().cpu().numpy()
 
+    elif fn_desc == "ssim":
+        ##fn = lambda x,y: 1-compare_ssim(x.transpose((1, 2, 0)), y.transpose((1, 2, 0)))
+        fn = lambda x,y: 1-structural_similarity(x,y,channel_axis = 2)
+    elif fn_desc == "ssim+":
+        fn = lambda x,y: structural_similarity(x,y,channel_axis = 2)
     return fn
 
 @memory.cache
 def eval_mse(runs = None, idxes = None, baseline = 0, fn_desc = None):
         
         ## must have either images and cols or runs and idxes
-        if images is None:
-            images = from_dirs(runs, idxes)
-            cols = len(idxes)
+        images = from_dirs(runs, idxes)
+        cols = len(idxes)
 
         return eval_mse_imgs(images, cols, baseline, fn_desc)
 
@@ -150,7 +162,7 @@ def eval_mse_stats(runs, idxes, baseline = 0, fn_desc = None):
     return mean, std
 
 @memory.cache
-def eval_mse_matrix(runs, idxes, fn_desc = None):
+def eval_mse_matrix(runs, idxes, fn_desc = None, stop = False):
 
     if isinstance(idxes, int):
         idxes = list(range(idxes))
@@ -168,6 +180,11 @@ def eval_mse_matrix(runs, idxes, fn_desc = None):
         std = mses.std(axis=0)
         matrix_means[baseline,:] = mean
         matrix_stds[baseline,:] = std
+        if stop:
+            matrix_means = matrix_means[0:1,:]
+            matrix_stds = matrix_stds[0:1,:]
+            break
+            
     return matrix_means, matrix_stds
 
 @memory.cache

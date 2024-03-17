@@ -193,11 +193,14 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     new_run = True
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    else: 
-        num_files = len([name for name in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, name))])
-        print("exists with ", num_files, " files")
-        new_run = False
 
+    if not os.path.exists("images"):
+        os.makedirs("images")
+    else:
+        if os.path.exists(os.path.join("images", name)):
+            num_files = len(os.listdir(os.path.join("images", name)))
+            print("exists with ", num_files, " files")
+            new_run = False
     print("-" * 80)
 
 
@@ -289,8 +292,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     idx = 0
 
-    if not os.path.exists("images"):
-        os.makedirs("images")
+
 
     mimages = []
 

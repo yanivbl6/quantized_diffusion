@@ -288,6 +288,57 @@ class WandbRuns:
         return cls._runs
 
 
+def plot_image_table(name, runs, titles, H, W, idx, directory = "images", show_ssim = False):
+
+    if isinstance(runs, str):
+        runs = [runs]
+
+    images = from_dirs(runs, [idx])
+
+    if show_ssim:
+        ssim = eval_mse(runs=runs, idxes=[idx], baseline=0, fn_desc = "ssim+")
+
+    samples = len(images)
+
+    assert H*W == samples, "H*W must be equal to the number of runs"
+    s = 3
+    fig, ax = plt.subplots(H, W, figsize=(10*s, 10*s), dpi=100)
+
+
+    for i in range(H):
+        for j in range(W):
+            if i*W+j < samples:
+
+                title = titles[i*W+j]
+                img = images[i*W+j]
+                if show_ssim:
+                    ssim_Val = ssim[0,i*W+j]
+                    draw = ImageDraw.Draw(img)
+                    text = f"SSIM: {ssim_Val:.4f}"
+                    text_position = (50, 50)  # Adjust as needed
+                    font = ImageFont.load_default()
+                    font = font.font_variant(size=50)
+                    draw.text(text_position, text, fill="white", font=font)
+
+                ax[i, j].set_title(title, fontsize=26)
+
+                ##images are Image objects
+                img = images[i*W+j]
+                ax[i, j].imshow(img)
+                ax[i, j].axis('off')
+
+
+
+    plt.savefig(directory + "/" + name + ".pdf", format= 'pdf')
+
+    try:
+        if get_ipython().__class__.__name__ == 'ZMQInteractiveShell':
+            plt.show()
+    except NameError:
+        pass
+
+    plt.close()
+
 def plot_lines(path = "dl-projects/qpipe_scores", baseline = False, 
                 count = 256, dtype = "M2E5", filter = lambda x: True,
                 label = "", field = "clip_score_mean", verbose = False):
