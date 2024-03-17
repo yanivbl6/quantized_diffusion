@@ -20,8 +20,11 @@ from utils.quantization_interpolation import interpolate_quantization_noise
 from utils.presentation import plot_grid
 from utils.evaluate import *
 from utils.prompts import get_prompt
+from utils.safe_mem import GuardMemOp
 
 from PIL import Image
+
+
 
 def parse_quant(arg):
     if isinstance(arg, Tuple):
@@ -83,7 +86,7 @@ def base_name(
     if repeat_module > 1:
         name += "_x" + str(repeat_module)
     elif repeat_module < 0:
-        name += "_adjustedV2"
+        name += "_adjusted"
 
 
 
@@ -191,18 +194,19 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     log_dir = "logs"
 
-    new_run = True
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    with GuardMemOp() as g:
+        new_run = True
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
 
-    if not os.path.exists(img_directory):
-        os.makedirs(img_directory)
-    else:
-        if os.path.exists(os.path.join(img_directory, name)):
-            num_files = len(os.listdir(os.path.join(img_directory, name)))
-            print("exists with ", num_files, " files")
-            new_run = False
-    print("-" * 80)
+        if not os.path.exists(img_directory):
+            os.makedirs(img_directory)
+        else:
+            if os.path.exists(os.path.join(img_directory, name)):
+                num_files = len(os.listdir(os.path.join(img_directory, name)))
+                print("exists with ", num_files, " files")
+                new_run = False
+        print("-" * 80)
 
 
     log_file = os.path.join(log_dir, name + ".log")
@@ -366,7 +370,10 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         
 
         ## save the image
-        image.save(fname)
+            
+        with GuardMemOp() as g:
+            image.save(fname)
+
         mimages.append(image)
 
     if samples > 1:
