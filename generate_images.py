@@ -32,6 +32,9 @@ parser.add_argument('-E', '--use_quantized_euler', action='store_true')
 parser.add_argument('--mse', action='store_true')
 parser.add_argument('--overwrite', action='store_true')
 
+parser.add_argument('--no_eval', action='store_true')
+
+
 parser.add_argument('--name', type=str, default="")
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--resolution', type=str, default="1024:1024")
@@ -39,6 +42,8 @@ parser.add_argument('--include', type=str, default="")
 parser.add_argument('-S','--scheduler_noise_mode', type=str, default="dynamic")
 
 parser.add_argument('--wandb', action='store_true')
+
+
 
 parser.add_argument('--img_directory', type=str, default="images")
 ##main
@@ -81,5 +86,5 @@ if __name__ == "__main__":
                     calc_mse= args.mse, overwrite = args.overwrite,
                     height = height, width = width, include = args.include,
                     scheduler_noise_mode=args.scheduler_noise_mode,
-                    img_directory = args.img_directory,
+                    img_directory = args.img_directory, clip_score= (not args.no_eval),
                     **kwargs)
