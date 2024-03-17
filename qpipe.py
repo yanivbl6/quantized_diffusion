@@ -300,7 +300,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     generator = torch.Generator(device="cuda")
 
-    subfolder = os.path.join("images", name)
+    subfolder = os.path.join(img_directory, name)
     if not os.path.exists(subfolder):
         os.makedirs(subfolder)
 
