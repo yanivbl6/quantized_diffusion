@@ -376,13 +376,13 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
         mimages.append(image)
 
-    if samples > 1:
+    # if samples > 1:
 
-        title = name.split("_g_")[0]
-        title = title.replace("_", " ")
-        if repeat_module < 0:
-            title = title + " $\gamma= " + "{:.0e}$".format(gamma_threshold)
-        plot_grid(name, mimages, title = title)
+    #     title = name.split("_g_")[0]
+    #     title = title.replace("_", " ")
+    #     if repeat_module < 0:
+    #         title = title + " $\gamma= " + "{:.0e}$".format(gamma_threshold)
+    #     plot_grid(name, mimages, title = title)
 
 
     args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
