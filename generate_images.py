@@ -40,7 +40,7 @@ parser.add_argument('-S','--scheduler_noise_mode', type=str, default="dynamic")
 
 parser.add_argument('--wandb', action='store_true')
 
-
+parser.add_argument('--img_directory', type=str, default="images")
 ##main
 
 def parse_resolution(resolution):
@@ -81,4 +81,5 @@ if __name__ == "__main__":
                     calc_mse= args.mse, overwrite = args.overwrite,
                     height = height, width = width, include = args.include,
                     scheduler_noise_mode=args.scheduler_noise_mode,
+                    img_directory = args.img_directory,
                     **kwargs)

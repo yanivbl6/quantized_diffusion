@@ -166,6 +166,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               width = 1024,
               include= "",
               scheduler_noise_mode = "dynamic",
+              img_directory = "images",
               **kwargs):
     
 
@@ -194,11 +195,11 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    if not os.path.exists("images"):
-        os.makedirs("images")
+    if not os.path.exists(img_directory):
+        os.makedirs(img_directory)
     else:
-        if os.path.exists(os.path.join("images", name)):
-            num_files = len(os.listdir(os.path.join("images", name)))
+        if os.path.exists(os.path.join(img_directory, name)):
+            num_files = len(os.listdir(os.path.join(img_directory, name)))
             print("exists with ", num_files, " files")
             new_run = False
     print("-" * 80)
