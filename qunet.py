@@ -650,6 +650,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   quantize_embedding: bool = False,
                   quantize_first: bool = False,
                   quantize_last: bool = False,
+                  abort_norm: bool = False,
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -704,7 +705,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         if repeat_model_count > 1:
             if calc_mse:
                 ## must come after check_for_nested_repeat_module_count and quantize_all_gemm_operations
-                qnet = HeavyRepeatModule(qnet, repeat_model_count, "qnet", True)
+                qnet = HeavyRepeatModule(qnet, repeat_model_count, "qnet", True, abort_norm)
             else:
                 qnet = RepeatModuleStats(qnet, repeat_model_count, "qnet", True) 
             ## final = false since we do the commit in the scheduler
@@ -713,7 +714,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         qnet.timestep_to_repetition = timestep_to_repetition
         qnet.last_repetition_count = repeat_model_count
 
-
+        qnet.set_abort_norm(False)
+        
         return qnet
 
     def quantize_all_weights(self, weight_quant: FloatingPoint, weight_flex_bias: bool, exclude: List[str] = []):
@@ -1468,6 +1470,9 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                     scale=lora_scale,
                 )
 
+        if self.abort_norm:
+            return (sample,)
+
         # 6. post-process
         if self.conv_norm_out:
             sample = self.conv_norm_out(sample)
@@ -1482,3 +1487,12 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             return (sample,)
 
         return UNet2DConditionOutput(sample=sample)
+
+    def set_abort_norm(self, value: bool):
+        r"""
+        Set the `abort_norm` attribute to `value`.
+
+        Args:
+            value (`bool`): The value to set the `abort_norm` attribute to.
+        """
+        self.abort_norm = value

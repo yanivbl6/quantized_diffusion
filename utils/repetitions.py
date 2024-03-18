@@ -142,7 +142,7 @@ class HeavyRepeatModule(torch.nn.Module):
     name = ""
     final = False
 
-    def __init__(self, op, num_iter = 1, name = "", final = False, idx = 0, 
+    def __init__(self, op, num_iter = 1, name = "", final = False, idx = 0, abort_norm = False,
                 ):## qops_list = [], attn_list = []):
         super(HeavyRepeatModule, self).__init__()
         self.exec_op = op
@@ -150,11 +150,15 @@ class HeavyRepeatModule(torch.nn.Module):
         self.mname = name
         self.final_log = final
         self.idx = idx
+        self.abort_norm = abort_norm
         ##self.qops_list = qops_list
         ##self.attn_list = attn_list
 
     def forward(self, x, *args, **kwargs):
     
+        if self.abort_norm:
+            self.exec_op.set_abort_norm(False)
+
         out = self.exec_op.forward(x, *args, **kwargs)
 
         if isinstance(out, tuple):
@@ -232,9 +236,6 @@ class HeavyRepeatModule(torch.nn.Module):
 
         bias = bias.mean()
 
-
-        
-
         if wandb.run is not None:
             wandb.log({self.mname + "_variance": variance_normalized.item(), 
                        self.mname + "_Variance": variance.item(),
@@ -246,6 +247,10 @@ class HeavyRepeatModule(torch.nn.Module):
                        "layer_index": self.idx}, 
                        commit = self.final_log)
                     
+        if self.abort_norm:
+            self.exec_op.set_abort_norm(True)
+            out_fp32 = self.exec_op.forward(x, *args, **kwargs)
+
         return out_fp32
 
     ## make sure that all other methods are passed to self.op:

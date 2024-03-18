@@ -29,7 +29,12 @@ parser.add_argument('-g','--gamma_threshold', type=float, default=1)
 parser.add_argument('-q','--quantized_run', action='store_true')
 parser.add_argument('-Q','--quantization_noise', type=str, default="cosh")
 parser.add_argument('-E', '--use_quantized_euler', action='store_true')
+
 parser.add_argument('--mse', action='store_true')
+parser.add_argument('--abort_norm', action='store_true')
+
+
+
 parser.add_argument('--overwrite', action='store_true')
 
 parser.add_argument('--no_eval', action='store_true')
@@ -86,5 +91,5 @@ if __name__ == "__main__":
                     calc_mse= args.mse, overwrite = args.overwrite,
                     height = height, width = width, include = args.include,
                     scheduler_noise_mode=args.scheduler_noise_mode,
-                    img_directory = args.img_directory, clip_score= (not args.no_eval),
+                    img_directory = args.img_directory, clip_score= (not args.no_eval), abort_norm = args.abort_norm,
                     **kwargs)

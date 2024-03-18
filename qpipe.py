@@ -172,6 +172,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               include= "",
               scheduler_noise_mode = "dynamic",
               img_directory = "images",
+              abort_norm = False,
               **kwargs):
     
 
@@ -274,7 +275,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     base.unet = QUNet2DConditionModel.from_unet(base.unet, weight_quant,  weight_flex_bias, qargs, 
                                                 repeat_module, repeat_model, layer_stats, individual_care, 
                                                 timestep_to_repetition1, calc_mse,
-                                                quantize_embedding, quantize_first, quantize_last)
+                                                quantize_embedding, quantize_first, quantize_last, abort_norm)
 
     if inspection:
         return base.unet
@@ -294,7 +295,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     refiner.unet = QUNet2DConditionModel.from_unet(refiner.unet, weight_quant, weight_flex_bias, qargs, 
                                                    repeat_module, repeat_model, layer_stats, individual_care,
                                                    timestep_to_repetition2, calc_mse,
-                                                   quantize_embedding, quantize_first, quantize_last)
+                                                   quantize_embedding, quantize_first, quantize_last, abort_norm)
 
 
     idx = 0
@@ -334,7 +335,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                     'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
                     'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
                     'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
-                    'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str,
+                    'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str, "abort_norm": abort_norm,
                     'calc_mse': calc_mse}
             
             args.update(kwargs)
