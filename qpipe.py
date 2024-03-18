@@ -374,7 +374,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         with GuardMemOp() as g:
             image.save(fname)
 
-        mimages.append(image)
+        if clip_score and samples > 4:
+            mimages.append(image)
 
     # if samples > 1:
 
@@ -384,33 +385,28 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     #         title = title + " $\gamma= " + "{:.0e}$".format(gamma_threshold)
     #     plot_grid(name, mimages, title = title)
 
-
-    args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
-            'fwd_quant_e': fwd_quant.exp, 'fwd_quant_m': fwd_quant.man, 'weight_quant_e': weight_quant.exp, 'weight_quant_m': weight_quant.man,
-            'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
-            'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
-            'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
-            'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str}
-    
-    args.update(kwargs)
-
-    ##add kwargs to args
-    
-    wname = name + "_" + str(idx)
-
-    ##delete all model to free memory
-    del base
-    del refiner
-    
-    torch.cuda.empty_cache()
-
-        
-
-
-
-
     if clip_score and samples > 4:
 
+        args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
+                'fwd_quant_e': fwd_quant.exp, 'fwd_quant_m': fwd_quant.man, 'weight_quant_e': weight_quant.exp, 'weight_quant_m': weight_quant.man,
+                'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
+                'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
+                'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
+                'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str}
+        
+        args.update(kwargs)
+
+        ##add kwargs to args
+        
+        wname = name + "_" + str(idx)
+
+        ##delete all model to free memory
+        del base
+        del refiner
+        
+        torch.cuda.empty_cache()
+
+            
         with wandb.init(project="qpipe_scores", entity= 'dl-projects', name=name, config=args):
 
             splits = 16 if len(mimages) > 64 else 4
