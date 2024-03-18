@@ -157,7 +157,7 @@ class HeavyRepeatModule(torch.nn.Module):
     def forward(self, x, *args, **kwargs):
     
         if self.abort_norm:
-            self.exec_op.set_abort_norm(False)
+            self.exec_op.set_abort_norm(True)
 
         out = self.exec_op.forward(x, *args, **kwargs)
 
@@ -248,7 +248,7 @@ class HeavyRepeatModule(torch.nn.Module):
                        commit = self.final_log)
                     
         if self.abort_norm:
-            self.exec_op.set_abort_norm(True)
+            self.exec_op.set_abort_norm(False)
             out_fp32 = self.exec_op.forward(x, *args, **kwargs)
 
         return out_fp32
