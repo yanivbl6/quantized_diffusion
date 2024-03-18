@@ -128,14 +128,14 @@ class Quantizer(nn.Module):
         self.backward_number = backward_number
         self.forward_rounding = forward_rounding
         self.backward_rounding = backward_rounding
-        self.flex_bias = flex_bias and (forward_number.man < 8)
+        self.flex_bias = flex_bias and (forward_number.man <= 8 or forward_number.exp == 0)
         self.quantizer = quantizer(self.forward_number, self.backward_number, self.forward_rounding, self.backward_rounding)
 
         self.qdrop = qdrop
         self.use_qdrop = qdrop > 0.0
 
         self.on = True
-    def forward(self, x, dim = None):
+    def forward(self, x, dim=None):
 
         if not self.on:
             return x
@@ -146,34 +146,22 @@ class Quantizer(nn.Module):
 
         if self.flex_bias:
             e = self.forward_number.exp
-            m = self.forward_number.man
-            if dim is not None and dim >=0:
+            
+            assert dim is None, "Flex bias not supported for dim != None"
 
-                c = x.abs()
+            if e == 0:
 
-                if dim >= len(x.shape):
-                    maxd = -1
-                    maxd_vals = []
-                    maxd_val = 0
-                    for d in range(len(x.shape)):
-                        c0, _ = c.max(dim = d, keepdim = True)
-                        std_c0 = c0.std()/c0.mean()
-                        if std_c0 > maxd_val:
-                            maxd_val = std_c0
-                            maxd = d
-                        maxd_vals.append(std_c0.item())
-
-                    str_msg = "maxd_vals: "+ str(maxd_vals) + ", maxd: " + str(maxd)
-                    print(str_msg)
-                    dim = maxd
-
-                c, _ = c.max(dim =dim, keepdim = True)
-                c = c/(2 - 2**(-m))
-                c = torch.clamp(c, min = 1E-3)
-                bhat = 2**(e-1) - torch.log2(c)
-
-                factor = 2**(torch.floor(bhat))
+                if len(x.shape) == 4:
+                    c = x.abs().max(dim=0, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+                elif len(x.shape) == 3:
+                    c = x.abs().max(dim=0, keepdim=True)[0]
+                elif len(x.shape) == 2:
+                    c = x.abs().max(dim=0, keepdim=True)[0]
+                else:
+                    c = x.abs().max()
+                factor = 2**(torch.floor((-torch.log2(c))))
             else:
+                m = self.forward_number.man
                 c = x.abs().max()/(2 - 2**(-m))
                 bhat = 2**(e-1) - log2(c) 
                 factor = 2**(floor(bhat))

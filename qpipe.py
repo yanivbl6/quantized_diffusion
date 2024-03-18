@@ -33,10 +33,22 @@ def parse_quant(arg):
         return arg
     elif isinstance(arg, str):
         ## format: "M{mantissa}E{exponent}"
-        match = re.match(r"M(\d+)E(\d+)", arg)
-        m = int(match.group(1))
-        e = int(match.group(2))
-        return FloatingPoint(e, m)
+
+        if arg[0:3].lower() == "int":
+            bits = int(arg[3:])
+
+            new_type = FixedPoint(bits, bits-1)
+            new_type.exp = 0
+            new_type.man = bits - 1
+            return  new_type
+        else:
+            
+            match = re.match(r"M(\d+)E(\d+)", arg)
+            assert match, "Invalid quantization format"
+            m = int(match.group(1))
+            e = int(match.group(2))
+            return FloatingPoint(e, m)
+
     else:
         raise ValueError("Invalid quantization format")
 
