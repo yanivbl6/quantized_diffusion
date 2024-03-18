@@ -61,6 +61,7 @@ def base_name(
     steps: int,
     include: str,
     scheduler_noise_mode: str,
+    calc_mse: bool,
     **kwargs,
 ) -> str:
     
@@ -88,7 +89,8 @@ def base_name(
     elif repeat_module < 0:
         name += "_adjusted"
 
-
+    if calc_mse:
+        name += "_stats"
 
     elif repeat_module < 0:
         name += "_dynamic"
@@ -186,7 +188,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         name = base_name(name_or_path, fwd_quant, weight_quant, weight_flex_bias,
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise, name,  
-                         prompt, n_steps, include, scheduler_noise_mode,
+                         prompt, n_steps, include, scheduler_noise_mode, calc_mse,
                          **kwargs) 
 
     print("-" * 80)
@@ -332,7 +334,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                     'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
                     'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
                     'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
-                    'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str}
+                    'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str,
+                    'calc_mse': calc_mse}
             
             args.update(kwargs)
 
@@ -341,7 +344,10 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
             wname = name + "_" + str(idx)
 
             wandb_entry = wandb.init(project="qpipe", entity= 'dl-projects', name=wname, config=args)
-            use_wandb = False
+
+
+            if not calc_mse:
+                use_wandb = False
         else:
             wandb_entry = nullcontext()
 

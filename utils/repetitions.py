@@ -219,20 +219,28 @@ class HeavyRepeatModule(torch.nn.Module):
 
         if isinstance(out, tuple):
             mse = ((out_fp32[0] - out[0]) ** 2).mean()
-            bias = (out_fp32[0] - out[0]).mean()
+            bias = (out_fp32[0] - out[0])
+            bias_out_corr = (bias*out_fp32[0]).mean() / ((out_fp32[0]**2).mean().sqrt() * (bias**2).mean().sqrt())
         elif isinstance(out, BaseOutput):
             mse = ((out_fp32.sample - out.sample) ** 2).mean()
-            bias = (out_fp32.sample - out.sample).mean()
+            bias = (out_fp32.sample - out.sample)
+            bias_out_corr = (bias*out_fp32.sample).mean() / ((out_fp32.sample**2).mean().sqrt() * (bias**2).mean().sqrt())
         else:
             mse = ((out_fp32 - out) ** 2).mean()
-            bias = (out_fp32 - out).mean()
+            bias = (out_fp32 - out)
+            bias_out_corr = (bias*out_fp32).mean() / ((out_fp32**2).mean().sqrt() * (bias**2).mean().sqrt())
 
+        bias = bias.mean()
+
+
+        
 
         if wandb.run is not None:
             wandb.log({self.mname + "_variance": variance_normalized.item(), 
                        self.mname + "_Variance": variance.item(),
                        self.mname + "_Std": variance.sqrt().item(),
                        self.mname + "_standard_deviation": standard_deviation.item(),
+                       self.mname + "_corr": bias_out_corr.item(),
                        "MSE": mse.item(),
                        "bias": bias.item(),
                        "layer_index": self.idx}, 
