@@ -233,10 +233,17 @@ class HeavyRepeatModule(torch.nn.Module):
             mse = ((out_fp32 - out) ** 2).mean()
             bias = (out_fp32 - out)
             bias_out_corr = (bias*out_fp32).mean() / ((out_fp32**2).mean().sqrt() * (bias**2).mean().sqrt())
+        
+        if bias.dim() == 4:
+            bias_results = {}
+            for c in range(bias.size(1)):
+                stats_name = self.mname + f"_bias_channel_{c}"
+                bias_results[stats_name] = bias[:,c].mean().item()
 
         bias = bias.mean()
 
         if wandb.run is not None:
+
             wandb.log({self.mname + "_variance": variance_normalized.item(), 
                        self.mname + "_Variance": variance.item(),
                        self.mname + "_Std": variance.sqrt().item(),
@@ -244,7 +251,8 @@ class HeavyRepeatModule(torch.nn.Module):
                        self.mname + "_corr": bias_out_corr.item(),
                        "MSE": mse.item(),
                        "bias": bias.item(),
-                       "layer_index": self.idx}, 
+                       "layer_index": self.idx,
+                       **bias_results}, 
                        commit = self.final_log)
                     
         if self.abort_norm:

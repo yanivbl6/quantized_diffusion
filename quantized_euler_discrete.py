@@ -132,15 +132,16 @@ def rescale_zero_terminal_snr(betas):
     return betas
 
 
-def calculate_gamma(sigma_Q, r):
+def calculate_gamma(sigma_Q, r, shift_options):
 
-    term = 1 - sigma_Q**2 * (1 - r**2)
-    sqrt_term = torch.sqrt(term)
-    
-    numerator = sqrt_term + (1 - r) * sigma_Q**2 - 1
-    denominator = 1 - sigma_Q**2
-    
-    result = numerator / denominator
+    if shift_options // 2 == 0:
+        term = 1 - sigma_Q**2 * (1 - r**2)
+        sqrt_term = torch.sqrt(term)
+        
+        numerator = sqrt_term + (1 - r) * sigma_Q**2 - 1
+        denominator = 1 - sigma_Q**2
+        
+        result = numerator / denominator
     
 
     ## nan to 0
@@ -214,7 +215,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         quantization_noise: Optional[Union[torch.Tensor, float]] = None, 
         gamma_threshold: float = 0.0,
         quantized_run: bool = True,
-        quantization_noise_mode: str = "dynamic"
+        quantization_noise_mode: str = "dynamic",
+        shift_options: int = 0,
     ):
         if trained_betas is not None:
             self.betas = torch.tensor(trained_betas, dtype=torch.float32)
@@ -273,7 +275,9 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                       "min": 2,
                       "average": 3,
                       "comp_max": 4,
-                      "comp_mean": 5
+                      "comp_mean": 5,
+                      "sqrt": 6,
+                      "square": 7,
                     }
         assert quantization_noise_mode in quantization_noise_mode_dict, f"quantization_noise_mode should be one of {list(quantization_noise_mode_dict.keys())}"
         self.quantization_noise_mode = quantization_noise_mode_dict[quantization_noise_mode]
@@ -285,7 +289,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         self.sigmas.to("cpu")  # to avoid too much CPU/GPU communication
 
 
-
+        self.shift_options = shift_options
 
 
     @staticmethod
@@ -293,7 +297,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                         quantization_noise: Optional[Union[torch.Tensor, float]] = None, 
                         gamma_threshold: float = 0.0,
                         quantized_run: bool = False,
-                        quantization_noise_mode: str = "dynamic"
+                        quantization_noise_mode: str = "dynamic",
+                        shift_options: int = 0,
                         ):
         config = scheduler.config
         config["_class_name"] = "ModifiedEulerDiscreteScheduler"
@@ -304,6 +309,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
 
         config["quantization_noise_mode"] = quantization_noise_mode
+        config["shift_options"] = shift_options
+
 
         sched = QuantizedEulerDiscreteScheduler.from_config(config)
 
@@ -364,14 +371,21 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                 quantization_noise[:] = quantization_noise.min()
             elif self.quantization_noise_mode == 3 or self.quantization_noise_mode == 5:
                 quantization_noise[:] = quantization_noise.mean()
+            elif self.quantization_noise_mode == 6:
+                quantization_noise[:] = quantization_noise.sqrt()
+            elif self.quantization_noise_mode == 7:
+                quantization_noise[:] = quantization_noise.square()
 
             self.repetitions = self.repetitions.to(tsigmas.device)
 
             sigma_ratio = tsigmas[1:] / tsigmas[:-1]
-            sigma_ratio = torch.cat([sigma_ratio, torch.tensor([0.0], device = sigma_ratio.device)])
 
+            if self.shift_options % 2 ==  0:
+                sigma_ratio = torch.cat([sigma_ratio, torch.tensor([0.0], device = sigma_ratio.device)])
+            elif self.shift_options % 2 == 1:
+                sigma_ratio = torch.cat([torch.tensor([1.0], device = sigma_ratio.device), sigma_ratio])
 
-            gammas = calculate_gamma(quantization_noise, sigma_ratio)
+            gammas = calculate_gamma(quantization_noise, sigma_ratio, self.shift_options)
 
 
 
@@ -379,7 +393,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
             while torch.any(gammas > gamma_threshold):
                 self.repetitions[gammas > gamma_threshold] += 1
                 new_quantization_noise = quantization_noise / torch.sqrt(self.repetitions)
-                gammas = calculate_gamma(new_quantization_noise, sigma_ratio)
+                gammas = calculate_gamma(new_quantization_noise, sigma_ratio, self.shift_options)
 
             self.gammas = gammas
 
@@ -498,9 +512,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         else:
             self.timesteps = torch.from_numpy(timesteps.astype(np.float32)).to(device=device)
 
+
         self.sigmas = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
-
-
 
         self.prepare_for_noise(self.quantization_noise, self.gamma_threshold, num_inference_steps, sigmas)
 

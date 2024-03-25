@@ -17,9 +17,21 @@ def interpolate_quantization_noise(fwd_quant, style, n_steps, include = ""):
                     "M3": "dl-projects/qpipe/9pcbity4",
                     "M2": "dl-projects/qpipe/hiidxu4f"}
         elif n_steps == 30:
-            paths = {"M4": "dl-projects/qpipe/8rrb80yt",
-                    "M3": "dl-projects/qpipe/bca7qs1m",
-                    "M2": "dl-projects/qpipe/7xo6mgmm"}
+            paths = {"M4": "dl-projects/qpipe/cx67kkez",
+                    "M3": "dl-projects/qpipe/yfn3l6fz",
+                    "M2": "dl-projects/qpipe/cku4nklf"}
+        elif n_steps == 200:
+            paths = {"M4": "dl-projects/qpipe/wf15v5g4",
+                    "M3": "dl-projects/qpipe/43nf4dot",
+                    "M2": "dl-projects/qpipe/1pjq1nxi"}
+        elif n_steps == 400:
+            paths = {"M4": "dl-projects/qpipe/yfn3l6fz",
+                    "M3": "dl-projects/qpipe/et7eawst",
+                    "M2": "dl-projects/qpipe/1pjq1nxi"}
+        elif n_steps == 800:
+            paths = {"M4": "dl-projects/qpipe/vlijm2v0",
+                    "M3": "dl-projects/qpipe/z6ks680q",
+                    "M2": "dl-projects/qpipe/k3o956cu"}
         else:
             paths = {"M4": "dl-projects/qpipe/251jhla0",
                     "M3": "dl-projects/qpipe/h5w65f23",
@@ -28,6 +40,9 @@ def interpolate_quantization_noise(fwd_quant, style, n_steps, include = ""):
         paths = {"M4": "dl-projects/qpipe/urtdzovp",
                 "M3": "dl-projects/qpipe/e5teob1d",
                 "M2": "dl-projects/qpipe/cfsbrumt"}
+
+
+
 
     fwd_quant_m = fwd_quant.split("E")[0]
 
@@ -45,11 +60,18 @@ def interpolate_quantization_noise(fwd_quant, style, n_steps, include = ""):
     else:
         fpath = os.path.join(backup_dir, fwd_quant + "_" +  str(n_steps) + ".obj")
 
-    if not os.path.exists(fpath):
+    if not os.path.exists(fpath) or style == "exact":
         run = wandb.Api().run(path)
 
         history = run.history()
         qnet_Std = history['qnet_Std']
+
+        if style == "exact":
+            assert(n_steps < len(qnet_Std), f"Exact interpolation requested but found only {len(qnet_Std)} steps")
+            quant_noise = torch.tensor(qnet_Std.values, dtype=torch.float32)
+            print(quant_noise)
+            return quant_noise
+        
         steps = history['_step']
         T = len(steps)
         y0 = qnet_Std.values[0]

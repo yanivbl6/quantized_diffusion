@@ -199,8 +199,12 @@ def plot_hybrid_grid(name, runs, idxes=0,directory = "images", per_page = None, 
 
     plt.close()
 
-def create_video(name, runs, idxes, directory="images", seconds = 3, 
-                 display_mse = False, display_is = True, repeat_baseline = False):
+def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3, name = None,
+                 display_mse = False, display_is = False,  display_ssim = False,
+                 repeat_baseline = True):
+
+    beginning = runs[0].split("/")[1].split("_")[0]
+    name = beginning + (("_" + name) if name is not None else beginning)
 
 
     if isinstance(idxes, int):
@@ -227,12 +231,16 @@ def create_video(name, runs, idxes, directory="images", seconds = 3,
 
     if display_mse:
         mses = eval_mse(runs=runs, idxes=idxes, baseline=0)
+    
+    if display_ssim:
+        ssim = eval_mse(runs=runs, idxes=idxes, baseline=0, fn_desc = "ssim+")
 
-
+    if not os.path.exists(vid_dir):
+        os.makedirs(vid_dir)
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
-    video_name = directory + "/" + name + ".mp4"
+    video_name =  vid_dir + "/" + name + ".mp4"
     height, width, _ = images[0].shape
     video = cv2.VideoWriter(video_name, fourcc, fps, (width, height))
 
@@ -262,13 +270,16 @@ def create_video(name, runs, idxes, directory="images", seconds = 3,
             image = images[i]
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             title = runs[i].split("/")[-1]
-            cv2.putText(image, title, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(image, title, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
             if display_mse:
                 mse = mses[j,i]
-                cv2.putText(image, f"MSE: {mse:.2f}", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(image, f"MSE: {mse:.2f}", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
             if display_is:
                 is_score = is_scores[i]
-                cv2.putText(image, f"IS: {is_score:.5f}", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(image, f"IS: {is_score:.5f}", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
+            if display_ssim:
+                ssim_score = ssim[j,i]
+                cv2.putText(image, f"SSIM: {ssim_score:.5f}", (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
             for _ in range(fps*seconds):
                 video.write(image)
 
@@ -288,7 +299,7 @@ class WandbRuns:
         return cls._runs
 
 
-def plot_image_table(name, runs, titles, H, W, idx, directory = "images", show_ssim = False):
+def plot_image_table(name, runs, titles, H, W, idx, directory = "figures", show_ssim = False, ssim_baseline = None):
 
     if isinstance(runs, str):
         runs = [runs]
@@ -296,7 +307,11 @@ def plot_image_table(name, runs, titles, H, W, idx, directory = "images", show_s
     images = from_dirs(runs, [idx])
 
     if show_ssim:
-        ssim = eval_mse(runs=runs, idxes=[idx], baseline=0, fn_desc = "ssim+")
+        if ssim_baseline is not None:
+            ssim_runs = [ssim_baseline] + runs
+            ssim = eval_mse(runs=ssim_runs, idxes=[idx], baseline=0, fn_desc = "ssim+")
+        else:
+            ssim = eval_mse(runs=runs, idxes=[idx], baseline=0, fn_desc = "ssim+")
 
     samples = len(images)
 
@@ -309,7 +324,15 @@ def plot_image_table(name, runs, titles, H, W, idx, directory = "images", show_s
         for j in range(W):
             if i*W+j < samples:
 
-                title = titles[i*W+j]
+                if len(titles) == samples:
+                    title = titles[i*W+j]
+                if len(titles) == H:
+                    if i == 0:
+                        titlex = titles[j] 
+                    else:
+                        titlex = None
+                    title = None
+
                 img = images[i*W+j]
                 if show_ssim:
                     ssim_Val = ssim[0,i*W+j]
@@ -317,11 +340,15 @@ def plot_image_table(name, runs, titles, H, W, idx, directory = "images", show_s
                     text = f"SSIM: {ssim_Val:.4f}"
                     text_position = (50, 50)  # Adjust as needed
                     font = ImageFont.load_default()
-                    font = font.font_variant(size=50)
+                    font = font.font_variant(size=72)
                     draw.text(text_position, text, fill="white", font=font)
 
-                ax[i, j].set_title(title, fontsize=26)
+                if title is not None:
+                    ax[i, j].set_title(title, fontsize=26)
+                if titlex is not None:
+                    ax[i, j].set_title(titlex, fontsize=26)
 
+    
                 ##images are Image objects
                 img = images[i*W+j]
                 ax[i, j].imshow(img)
@@ -329,7 +356,7 @@ def plot_image_table(name, runs, titles, H, W, idx, directory = "images", show_s
 
 
 
-    plt.savefig(directory + "/" + name + ".pdf", format= 'pdf')
+    plt.savefig(directory + "/" + name + ".pdf", format= 'pdf', bbox_inches='tight')
 
     try:
         if get_ipython().__class__.__name__ == 'ZMQInteractiveShell':

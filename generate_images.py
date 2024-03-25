@@ -47,8 +47,9 @@ parser.add_argument('--include', type=str, default="")
 parser.add_argument('-S','--scheduler_noise_mode', type=str, default="dynamic")
 
 parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--shift_options', type=int, default=0)
 
-
+parser.add_argument('--noSR', action='store_true')
 
 parser.add_argument('--img_directory', type=str, default="images")
 ##main
@@ -78,7 +79,9 @@ if __name__ == "__main__":
 
     kwargs = {"quantization_noise": args.quantization_noise, "gamma_threshold": args.gamma_threshold, "quantized_run": args.quantized_run}
 
-    
+    if args.noSR:
+        kwargs["activate_rounding"] = "nearest"
+
     height, width = parse_resolution(args.resolution)
 
 
@@ -92,4 +95,5 @@ if __name__ == "__main__":
                     height = height, width = width, include = args.include,
                     scheduler_noise_mode=args.scheduler_noise_mode,
                     img_directory = args.img_directory, clip_score= (not args.no_eval), abort_norm = args.abort_norm,
+                    shift_options = args.shift_options,
                     **kwargs)

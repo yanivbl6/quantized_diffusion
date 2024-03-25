@@ -74,6 +74,7 @@ def base_name(
     include: str,
     scheduler_noise_mode: str,
     calc_mse: bool,
+    shift_options: int,
     **kwargs,
 ) -> str:
     
@@ -101,11 +102,14 @@ def base_name(
     elif repeat_module < 0:
         name += "_adjusted"
 
+    if shift_options > 0:
+        name += "_shift" + str(shift_options)
+
+    if quantization_noise != "cosh":
+        name += "_QN_" + str(quantization_noise)
+
     if calc_mse:
         name += "_stats"
-
-    elif repeat_module < 0:
-        name += "_dynamic"
 
     if individual_care:
         name += "_perlayer"
@@ -114,7 +118,11 @@ def base_name(
         name += "_N" + str(repeat_model)
 
 
-    
+    if 'activate_rounding' in kwargs:
+        if kwargs['activate_rounding'] == "nearest":
+            name += "_noSR" 
+        else:
+            name += "_rounding_" + kwargs['activate_rounding']
 
     return name
 
@@ -185,6 +193,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               scheduler_noise_mode = "dynamic",
               img_directory = "images",
               abort_norm = False,
+              shift_options = 0,
               **kwargs):
     
 
@@ -200,8 +209,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if isinstance(fwd_quant, str) and isinstance(weight_quant, str):
         name = base_name(name_or_path, fwd_quant, weight_quant, weight_flex_bias,
                          quantized_run, repeat_module, repeat_model, layer_stats, 
-                         individual_care, gamma_threshold, quantization_noise, name,  
-                         prompt, n_steps, include, scheduler_noise_mode, calc_mse,
+                         individual_care, gamma_threshold, quantization_noise_str, name,  
+                         prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options,
                          **kwargs) 
 
     print("-" * 80)
@@ -256,7 +265,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                         quantization_noise = quantization_noise,
                                                                         gamma_threshold = gamma_threshold,
                                                                         quantized_run = quantized_run,
-                                                                        quantization_noise_mode = scheduler_noise_mode)
+                                                                        quantization_noise_mode = scheduler_noise_mode,
+                                                                        shift_options = shift_options)
         
         base.scheduler.set_timesteps(n_steps)
 
@@ -297,7 +307,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                            quantization_noise = quantization_noise,
                                                                             gamma_threshold = gamma_threshold,
                                                                             quantized_run = quantized_run,
-                                                                            quantization_noise_mode = scheduler_noise_mode)
+                                                                            quantization_noise_mode = scheduler_noise_mode,
+                                                                            shift_options = shift_options)
         refiner.scheduler.set_timesteps(n_steps1)
         timestep_to_repetition2 = refiner.scheduler.make_repetition_plan()
 
@@ -348,7 +359,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                     'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
                     'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
                     'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str, "abort_norm": abort_norm,
-                    'calc_mse': calc_mse}
+                    'calc_mse': calc_mse, 'shift_options': shift_options}
             
             args.update(kwargs)
 
@@ -411,7 +422,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                 'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
                 'idx': idx, 'version': 5, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
                 'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
-                'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str}
+                'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str,
+                'shift_options': shift_options}
         
         args.update(kwargs)
 
@@ -429,7 +441,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         with wandb.init(project="qpipe_scores", entity= 'dl-projects', name=name, config=args):
 
             splits = 16 if len(mimages) > 64 else 4
-            IS_mean, IS_std = inception_score(mimages,splits = splits) 
+            IS_mean, IS_std = inception_score(mimages, splits = splits) 
 
             clip_score_mean, clip_score_mean_std  = clip_eval_std(mimages, pprompt, splits = splits)
             clip_score_large_mean, clip_score_large_std  = clip_eval_std(mimages, pprompt, splits = splits, type = "large")
@@ -445,6 +457,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                         'pickapick': pickapick_mean,
                         'pickapick_std': pickapick_std,
                        })
+
             print("CLIP score: ", clip_score_mean, "±", clip_score_mean_std)
             print("CLIP score large: ", clip_score_large_mean, "±", clip_score_large_std)
             print("Inception score: ", IS_mean, "±", IS_std)

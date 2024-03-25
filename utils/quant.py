@@ -133,8 +133,9 @@ class Quantizer(nn.Module):
 
         self.qdrop = qdrop
         self.use_qdrop = qdrop > 0.0
-
         self.on = True
+
+
     def forward(self, x, dim=None):
 
         if not self.on:
@@ -211,6 +212,9 @@ def make_block_quantizer(activate: FloatingPoint = FloatingPoint(8, 23),
                          qdrop: float = 0.0,
                          **kwargs):
     
+    if activate_rounding == "nearest":
+        warnings.warn("Using nearest rounding for activations")
+
     if activate.exp < 8 or activate.man < 23:
         ##print("Making quantizer with: ", activate, error, activate_rounding, error_rounding, flex_bias, qdrop)
         return Quantizer(
