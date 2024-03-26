@@ -129,6 +129,8 @@ class Quantizer(nn.Module):
         self.forward_rounding = forward_rounding
         self.backward_rounding = backward_rounding
         self.flex_bias = flex_bias and (forward_number.man <= 8 or forward_number.exp == 0)
+
+        ##import pdb; pdb.set_trace()
         self.quantizer = quantizer(self.forward_number, self.backward_number, self.forward_rounding, self.backward_rounding)
 
         self.qdrop = qdrop

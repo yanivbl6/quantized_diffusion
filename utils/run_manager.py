@@ -79,25 +79,25 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             row_names.append("fp32")
         if no_flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
-            row_names.append(f"{experiment}")
+            row_names.append(f"vanilla no flex, no emb")
         if flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex')
-            row_names.append(f"{experiment} + flex")
+            row_names.append(f"vanilla no emb")
         if adjusted and flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
-            row_names.append(f"{experiment} + flex + adjusted")
+            row_names.append(f"adjusted no emb")
         if embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding')
-            row_names.append(f"{experiment} + flex + embedding")
+            row_names.append(f"vanilla")
         if adjusted and embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted')
-            row_names.append(f"{experiment} + flex + embedding + adjusted")
+            row_names.append(f"adjusted")
         if first:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_not_embedding')
-            row_names.append(f"{experiment} + flex + first + last")
+            row_names.append(f"quantized in/out")
         if shift1:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_shift1')
-            row_names.append(f"shift1 variant")
+            row_names.append(f"shifted Q")
         if expexp:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_expexp')
             row_names.append(f"expexp interp")
@@ -120,6 +120,7 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_noSR')
             row_names.append(f"no SR")
 
+    runs = [(run if run != "images/morgana2x400_M3E4_flex_embedding_adjusted" else "images/morgana2x400_M3E4_flex_embedding_adjusted_again") for run in runs]
 
     if check_for:
         check_directories(runs, check_for)
@@ -127,16 +128,16 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
     return runs, row_names
 
 
-def highlight_max(df):
+def highlight_max(df, exclude = 0):
     # Create a style function
     def style_func(s):
-        is_max = s == s.iloc[1:].max()
+        is_max = s == s.iloc[1:-exclude].max()
         return ['font-weight: bold' if v else '' for v in is_max]
 
     # Apply the style function to the DataFrame, excluding the first column
     df_styled = df.style.apply(style_func, axis=1)
     # Set the precision
-    df_styled.format("{:.2f}")
+    df_styled.format("{:.3f}")
 
     return df_styled
 
@@ -149,7 +150,7 @@ def to_pd(results_dict, results_dict_steps,  col_names):
     for experiment in experiments:
         for i,step in enumerate(steps):
             row_names += [f"{experiment} {step}"]
-            rows.append([np.round(res[i],2) for res in results_dict[experiment].values()])
+            rows.append([np.round(res[i],3) for res in results_dict[experiment].values()])
 
     df = pd.DataFrame(rows,  index = row_names, columns = col_names)
 
@@ -158,7 +159,13 @@ def to_pd(results_dict, results_dict_steps,  col_names):
     return df
 
 
-def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run = 64, experiment_flags = "ablation", dry = False, quiet = False):
+def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run = 64, experiment_flags = "ablation", 
+                dry = False, quiet = False,
+                pvals = []):
+    
+    if not isinstance(pvals, list):
+        pvals = [pvals]
+
     results_dict_ssim = {}
     results_dict_ssim_std = {}
     results_dict_steps = {}
@@ -175,6 +182,10 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run
                 if dry:
                     continue
                 ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim+", stop = True)
+
+
+
+
                 ssim = ssim[0,:]
                 std = std[0,:]
 
@@ -185,12 +196,25 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run
                     results_dict_ssim[experiment][row_names[k]] += [ssim[k]]
                     results_dict_ssim_std[experiment][row_names[k]] += [std[k]]
 
+                for u,v in pvals:
+                    p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim+")
+                    p_row_name = f"P|H0=({row_names[u]} <= {row_names[v]})"
+                    row_names.append(p_row_name)
+                    if p_row_name not in results_dict_ssim[experiment]:
+                        results_dict_ssim[experiment][p_row_name] = []
+                        results_dict_ssim_std[experiment][p_row_name] = []
+                    results_dict_ssim[experiment][p_row_name] += [p]
+                    results_dict_ssim_std[experiment][p_row_name] += [0]
+
                 results_dict_steps[experiment] += [n_steps]
     df = to_pd(results_dict_ssim, results_dict_steps, row_names)
 
-    df_styled = highlight_max(df)
+    df_styled = highlight_max(df, len(pvals))
 
     return df_styled
+
+
+
 
 
 def merge(df1, df2, *args):

@@ -77,6 +77,8 @@ def quantizer(
         if num != None:
             assert isinstance(num, Number)
 
+
+
     if clamping_grad_zero == False:
         if forward_rounding == "nearest":
             if type(forward_number) == BlockFloatingPoint:
@@ -149,62 +151,122 @@ def quantizer(
 
     if clamping_grad_zero == False:
 
-        class Rounding(torch.autograd.Function):
-            @staticmethod
-            def forward(self, x):
+        if forward_rounding == "stochastic":
+            class Rounding(torch.autograd.Function):
+                @staticmethod
+                def forward(self, x):
 
-                if forward_number == None:
-                    return x
+                    if forward_number == None:
+                        return x
 
-                out = quant_cuda.float_quantize_stochastic(x.contiguous(), forward_number.man, forward_number.exp)
+                    out = quant_cuda.float_quantize_stochastic(x.contiguous(), forward_number.man, forward_number.exp)
 
-                return out
+                    return out
 
-            @staticmethod
-            def backward(self, grad_output):
+                @staticmethod
+                def backward(self, grad_output):
 
-                if self.needs_input_grad[0]:
-                    if backward_number == None:
-                        grad_input = grad_output
+                    if self.needs_input_grad[0]:
+                        if backward_number == None:
+                            grad_input = grad_output
+                        else:
+                            grad_input = quant_cuda.float_quantize_stochastic(grad_output.contiguous(), backward_number.man, backward_number.exp)
                     else:
-                        grad_input = quant_cuda.float_quantize_stochastic(grad_output.contiguous(), backward_number.man, backward_number.exp)
-                else:
-                    grad_input = None
+                        grad_input = None
 
-                return grad_input
+                    return grad_input
+        else:
+            class Rounding(torch.autograd.Function):
+                @staticmethod
+                def forward(self, x):
+
+                    if forward_number == None:
+                        return x
+
+                    out = quant_cuda.float_quantize_nearest(x.contiguous(), forward_number.man, forward_number.exp)
+
+                    return out
+
+                @staticmethod
+                def backward(self, grad_output):
+
+                    if self.needs_input_grad[0]:
+                        if backward_number == None:
+                            grad_input = grad_output
+                        else:
+                            grad_input = quant_cuda.float_quantize_nearest(grad_output.contiguous(), backward_number.man, backward_number.exp)
+                    else:
+                        grad_input = None
+
+                    return grad_input
 
     else:
 
-        class Rounding(torch.autograd.Function):
-            @staticmethod
-            def forward(self, x):       
-                # breakpoint() 
-                if forward_number == None:
-                    self.mask = torch.zeros_like(x).bool()
-                    return x
-                else:
-                    out, mask = quant_cuda.float_quantize_stochastic(x, forward_number.man, forward_number.exp)
-
-                    self.mask = mask
-
-                return out
-
-            @staticmethod
-            def backward(self, grad_output):
-                if self.needs_input_grad[0]:
-                    if backward_number == None:
-                        grad_input = grad_output
+        if forward_rounding == "nearest":
+            class Rounding(torch.autograd.Function):
+                @staticmethod
+                def forward(self, x):       
+                    # breakpoint() 
+                    if forward_number == None:
+                        self.mask = torch.zeros_like(x).bool()
+                        return x
                     else:
-                        # grad_output = grad_output.contiguous().masked_fill_(self.mask, 0)
-                        for f in backward_hooks:
-                            grad_output = f(grad_output)
-                        grad_input = backward_quant(grad_output.contiguous(), quant_cuda).masked_fill(
-                            self.mask.bool(), 0
-                        )
-                else:
-                    grad_input = None
+                        out, mask = quant_cuda.float_quantize_stochastic(x, forward_number.man, forward_number.exp)
+                    
+                        self.mask = mask
 
-                return grad_input
+                    return out
+
+                @staticmethod
+                def backward(self, grad_output):
+                    if self.needs_input_grad[0]:
+                        if backward_number == None:
+                            grad_input = grad_output
+                        else:
+                            # grad_output = grad_output.contiguous().masked_fill_(self.mask, 0)
+                            for f in backward_hooks:
+                                grad_output = f(grad_output)
+                            grad_input = backward_quant(grad_output.contiguous(), quant_cuda).masked_fill(
+                                self.mask.bool(), 0
+                            )
+                    else:
+                        grad_input = None
+
+                    return grad_input
+        else:
+            class Rounding(torch.autograd.Function):
+                @staticmethod
+                def forward(self, x):       
+                    # breakpoint() 
+                    if forward_number == None:
+                        self.mask = torch.zeros_like(x).bool()
+                        return x
+                    else:
+                        out, mask = quant_cuda.float_quantize_nearest(x, forward_number.man, forward_number.exp)
+                    
+                        self.mask = mask
+
+                    return out
+
+                @staticmethod
+                def backward(self, grad_output):
+                    if self.needs_input_grad[0]:
+                        if backward_number == None:
+                            grad_input = grad_output
+                        else:
+                            # grad_output = grad_output.contiguous().masked_fill_(self.mask, 0)
+                            for f in backward_hooks:
+                                grad_output = f(grad_output)
+                            grad_input = backward_quant(grad_output.contiguous(), quant_cuda).masked_fill(
+                                self.mask.bool(), 0
+                            )
+                    else:
+                        grad_input = None
+
+                    return grad_input
+
+
+
 
     return Rounding
 
@@ -278,6 +340,7 @@ def float_quantize(x, exp, man, rounding="stochastic"):
     assert isinstance(x, torch.Tensor), "x is not a single precision Floating Point Tensor"
     assert rounding in ["stochastic", "nearest"], "invalid rounding mode, {}".format(rounding)
     quant_module = get_module(x)
+
     if rounding == "nearest":
         out = quant_module.float_quantize_nearest(x.contiguous(), man, exp)
     elif rounding == "stochastic":

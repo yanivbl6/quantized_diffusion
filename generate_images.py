@@ -51,6 +51,9 @@ parser.add_argument('--shift_options', type=int, default=0)
 
 parser.add_argument('--noSR', action='store_true')
 
+parser.add_argument('--deterministic', action='store_true')
+
+
 parser.add_argument('--img_directory', type=str, default="images")
 ##main
 
@@ -84,6 +87,11 @@ if __name__ == "__main__":
 
     height, width = parse_resolution(args.resolution)
 
+    if args.deterministic:
+        ## make everything deterministic
+        torch.manual_seed(0)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
     image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
                     fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 

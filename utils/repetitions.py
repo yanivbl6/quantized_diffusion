@@ -156,49 +156,11 @@ class HeavyRepeatModule(torch.nn.Module):
 
     def forward(self, x, *args, **kwargs):
     
+
+
+
         if self.abort_norm:
             self.exec_op.set_abort_norm(True)
-
-        out = self.exec_op.forward(x, *args, **kwargs)
-
-        if isinstance(out, tuple):
-            out_sum_squares = out[0] ** 2 
-        elif isinstance(out, BaseOutput):
-            out_sum_squares = out.sample ** 2
-        else:
-            out_sum_squares = out ** 2
-
-        for _ in range(1, self.num_iter):
-            out_i = self.exec_op.forward(x, *args, **kwargs)
-            if isinstance(out, tuple):
-                out_sum_squares += out_i[0] ** 2
-                out = tuple([o + oi for o, oi in zip(out, out_i)])
-            elif isinstance(out, BaseOutput):
-                out.sample = out.sample + out_i.sample
-                out_sum_squares += out.sample ** 2
-            else:
-                out += out_i
-                out_sum_squares += out_i ** 2
-
-        if isinstance(out, tuple):
-            out = tuple([o / self.num_iter for o in out])
-            variance = ((out_sum_squares / self.num_iter) - out[0] ** 2)
-            standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out[0] ** 2)
-        elif isinstance(out, BaseOutput):
-            out.sample = out.sample / self.num_iter
-            variance = ((out_sum_squares / self.num_iter) - out.sample ** 2)
-            standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out.sample ** 2)
-        else:
-            out = out / self.num_iter
-            variance = ((out_sum_squares / self.num_iter) - out ** 2) 
-            standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out ** 2)
-        
-        variance = variance.mean()
-        standard_deviation = standard_deviation.mean()
-        variance_normalized = variance_normalized.mean()
 
         ## disable all quantization and attention modules
         unet = self.exec_op
@@ -220,6 +182,56 @@ class HeavyRepeatModule(torch.nn.Module):
             if isinstance(op, Attention):
                 op.enabled = True
 
+
+
+        out = self.exec_op.forward(x, *args, **kwargs)
+
+        if isinstance(out, tuple):
+            out_sum_squares = out[0] ** 2 
+            out_diff = ((out[0] - out_fp32[0])**2).mean()
+        elif isinstance(out, BaseOutput):
+            out_sum_squares = out.sample ** 2
+            out_diff = ((out.sample - out_fp32.sample)**2).mean()
+        else:
+            out_sum_squares = out ** 2
+            out_diff = ((out - out_fp32)**2).mean()
+
+        for _ in range(1, self.num_iter):
+            out_i = self.exec_op.forward(x, *args, **kwargs)
+            if isinstance(out, tuple):
+                out_sum_squares += out_i[0] ** 2
+                out_diff += ((out_i[0] - out_fp32[0])**2).mean()
+                out = tuple([o + oi for o, oi in zip(out, out_i)])
+            elif isinstance(out, BaseOutput):
+                out.sample = out.sample + out_i.sample
+                out_sum_squares += out.sample ** 2
+                out_diff += ((out_i.sample - out_fp32.sample)**2).mean()
+            else:
+                out += out_i
+                out_sum_squares += out_i ** 2
+                out_diff += ((out_i - out_fp32)**2).mean()
+
+        if isinstance(out, tuple):
+            out = tuple([o / self.num_iter for o in out])
+            variance = ((out_sum_squares / self.num_iter) - out[0] ** 2)
+            standard_deviation = variance.sqrt()
+            variance_normalized = variance / (out[0] ** 2)
+        elif isinstance(out, BaseOutput):
+            out.sample = out.sample / self.num_iter
+            variance = ((out_sum_squares / self.num_iter) - out.sample ** 2)
+            standard_deviation = variance.sqrt()
+            variance_normalized = variance / (out.sample ** 2)
+        else:
+            out = out / self.num_iter
+            variance = ((out_sum_squares / self.num_iter) - out ** 2) 
+            standard_deviation = variance.sqrt()
+            variance_normalized = variance / (out ** 2)
+        
+        MSE_single = out_diff / self.num_iter
+
+        variance = variance.mean()
+        standard_deviation = standard_deviation.mean()
+        variance_normalized = variance_normalized.mean()
 
         if isinstance(out, tuple):
             mse = ((out_fp32[0] - out[0]) ** 2).mean()
@@ -250,6 +262,7 @@ class HeavyRepeatModule(torch.nn.Module):
                        self.mname + "_standard_deviation": standard_deviation.item(),
                        self.mname + "_corr": bias_out_corr.item(),
                        "MSE": mse.item(),
+                       "MSE_single": MSE_single.item(),
                        "bias": bias.item(),
                        "layer_index": self.idx,
                        **bias_results}, 
