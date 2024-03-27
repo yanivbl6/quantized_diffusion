@@ -37,7 +37,7 @@ parser.add_argument('--abort_norm', action='store_true')
 
 parser.add_argument('--overwrite', action='store_true')
 
-parser.add_argument('--no_eval', action='store_true')
+parser.add_argument('--eval', action='store_true')
 
 
 parser.add_argument('--name', type=str, default="")
@@ -93,15 +93,24 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
-                    fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 
-                    samples=args.samples, n_steps = args.n_steps, name = args.name,
-                    repeat_module = args.repeat_module, repeat_model = args.repeat_model, use_wandb=args.wandb,
-                    layer_stats = args.layer_stats, individual_care = args.individual_care, inspection = args.inspection,
-                    prompt = args.prompt, high_noise_frac = args.high_noise_frac,
-                    calc_mse= args.mse, overwrite = args.overwrite,
-                    height = height, width = width, include = args.include,
-                    scheduler_noise_mode=args.scheduler_noise_mode,
-                    img_directory = args.img_directory, clip_score= (not args.no_eval), abort_norm = args.abort_norm,
-                    shift_options = args.shift_options,
-                    **kwargs)
+    if args.n_steps > 0:
+        all_steps = [args.n_steps]
+    else:
+        all_steps = [100, 200, 400, 800]
+
+    for n_steps in all_steps:
+        image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
+                        fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 
+                        samples=args.samples, n_steps = n_steps, name = args.name,
+                        repeat_module = args.repeat_module, repeat_model = args.repeat_model, use_wandb=args.wandb,
+                        layer_stats = args.layer_stats, individual_care = args.individual_care, inspection = args.inspection,
+                        prompt = args.prompt, high_noise_frac = args.high_noise_frac,
+                        calc_mse= args.mse, overwrite = args.overwrite,
+                        height = height, width = width, include = args.include,
+                        scheduler_noise_mode=args.scheduler_noise_mode,
+                        img_directory = args.img_directory, clip_score= args.eval, abort_norm = args.abort_norm,
+                        shift_options = args.shift_options,
+                        **kwargs)
+        
+        torch.cuda.empty_cache()
+        print("Done with n_steps", n_steps)

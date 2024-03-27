@@ -117,7 +117,7 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_exact')
             row_names.append(f"Exact Q")
         if nosr:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_noSR')
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_nearest')
             row_names.append(f"no SR")
 
     runs = [(run if run != "images/morgana2x400_M3E4_flex_embedding_adjusted" else "images/morgana2x400_M3E4_flex_embedding_adjusted_again") for run in runs]
