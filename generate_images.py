@@ -57,7 +57,7 @@ parser.add_argument('--deterministic', action='store_true')
 parser.add_argument('--img_directory', type=str, default="images")
 
 parser.add_argument('--stem', type=int, default=0)
-parser.add_argument('--STEM', type=int, default=-1)
+parser.add_argument('--STEM', type=int, default=0)
 
 ##main
 

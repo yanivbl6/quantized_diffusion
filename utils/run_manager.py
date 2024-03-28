@@ -129,6 +129,36 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_nearest')
             row_names.append(f"adjusted nearest")
 
+        if stem:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem1_flex_embedding')
+            row_names.append(f"stochastic p_emb")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem2_flex_embedding')
+            row_names.append(f"stochastic t_emb")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem3_flex_embedding')
+            row_names.append(f"stochastic embs")
+            if adjusted:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem1_flex_embedding_adjusted')
+                row_names.append(f"stochastic p_emb (adjusted)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem2_flex_embedding_adjusted')
+                row_names.append(f"stochastic t_emb (adjusted)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem3_flex_embedding_adjusted')
+                row_names.append(f"stochastic embs (adjusted)")
+        if STEM:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM1_flex_embedding')
+            row_names.append(f"stochastic p_emb (+refiner)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM2_flex_embedding')
+            row_names.append(f"stochastic t_emb (+refiner)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding')
+            row_names.append(f"stochastic embs (+refiner)")
+            if adjusted:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM1_flex_embedding_adjusted')
+                row_names.append(f"stochastic p_emb (+refiner, adjusted)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM2_flex_embedding_adjusted')
+                row_names.append(f"stochastic t_emb (+refiner, adjusted)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding_adjusted')
+                row_names.append(f"stochastic embs (+refiner, adjusted)")
+
+
     runs = [(run if run != "images/morgana2x400_M3E4_flex_embedding_adjusted" else "images/morgana2x400_M3E4_flex_embedding_adjusted_again") for run in runs]
 
     if check_for:
