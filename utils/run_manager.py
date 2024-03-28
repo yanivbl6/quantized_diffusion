@@ -47,11 +47,13 @@ def get_flags_for_experiment(experiment):
         return {"adjusted": True, "embedding": True, "expexp": True, "exact": True}
     elif experiment == "sr":
         return {"adjusted": True, "embedding": True, "nosr": True}
+    elif experiment == "nearest":
+        return {"embedding": True, "nosr": True}
     else:
         raise ValueError(f"Unknown experiment: {experiment}, must be one of {list_experiments()}")
 
 def list_experiments():
-    return ["adjusted_emb", "adjusted_flex", "all", "pre", "flex", "shift1", "expexp", "variants", "ablation", "QN", "sr"]
+    return ["adjusted_emb", "adjusted_flex", "all", "pre", "flex", "shift1", "expexp", "variants", "ablation", "QN", "sr","nearest"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
@@ -70,8 +72,7 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         ]
 
         row_names = ["fp32", "M10E5", "M7E8"]
-    elif experiment in ["int8","M4E3", "M3E4", "M2E5"]:
-
+    else:
         runs = []
         row_names = []
         if baseline:
@@ -83,12 +84,17 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         if flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex')
             row_names.append(f"vanilla no emb")
+
         if adjusted and flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
             row_names.append(f"adjusted no emb")
         if embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding')
             row_names.append(f"vanilla")
+        if embedding and nosr:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_nearest')
+            row_names.append(f"nearest")
+
         if adjusted and embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted')
             row_names.append(f"adjusted")
@@ -116,9 +122,9 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         if exact:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_exact')
             row_names.append(f"Exact Q")
-        if nosr:
+        if nosr and adjusted and embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_nearest')
-            row_names.append(f"no SR")
+            row_names.append(f"adjusted nearest")
 
     runs = [(run if run != "images/morgana2x400_M3E4_flex_embedding_adjusted" else "images/morgana2x400_M3E4_flex_embedding_adjusted_again") for run in runs]
 
@@ -159,7 +165,7 @@ def to_pd(results_dict, results_dict_steps,  col_names):
     return df
 
 
-def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run = 64, experiment_flags = "ablation", 
+def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
                 dry = False, quiet = False,
                 pvals = []):
     
@@ -175,7 +181,7 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run
         results_dict_ssim_std[experiment] = {}
         results_dict_steps[experiment] = []
         for n_steps in steps:
-            runs, row_names = get_runs_and_names(experiment, n_steps, experiment_flags= experiment_flags)
+            runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, experiment_flags= experiment_flags)
             if check_directories(runs, images_per_run):
                 if not quiet:
                     print(f"Experiment: {experiment}, n_steps: {n_steps}")
@@ -198,7 +204,7 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run
 
                 for u,v in pvals:
                     p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim+")
-                    p_row_name = f"P|H0=({row_names[u]} <= {row_names[v]})"
+                    p_row_name = f"Pval({row_names[u]} > {row_names[v]})"
                     row_names.append(p_row_name)
                     if p_row_name not in results_dict_ssim[experiment]:
                         results_dict_ssim[experiment][p_row_name] = []
