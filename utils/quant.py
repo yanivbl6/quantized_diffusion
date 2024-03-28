@@ -188,13 +188,13 @@ class Quantizer(nn.Module):
         self.on = False
 
     
-def make_weight_quantizer(weights_number: FloatingPoint = FloatingPoint(8, 23), weight_flex_bias: bool = False):
+def make_weight_quantizer(weights_number: FloatingPoint = FloatingPoint(8, 23), weight_flex_bias: bool = False, stochastic: bool = False):
 
     if weights_number.exp < 8 or weights_number.man < 23:
         quant = Quantizer(
             weights_number,
             FloatingPoint(8, 23),
-            "nearest",
+            "nearest" if not stochastic else "stochastic", 
             "nearest",
             weight_flex_bias,
             0.0,

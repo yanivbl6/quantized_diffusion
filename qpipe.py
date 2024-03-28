@@ -75,6 +75,7 @@ def base_name(
     scheduler_noise_mode: str,
     calc_mse: bool,
     shift_options: int,
+    stochastic_emb_mode: int = 0,
     **kwargs,
 ) -> str:
     
@@ -85,8 +86,15 @@ def base_name(
     else:
         name = name + "A_" + fwd_quant + "_W_" + weight_quant
 
+    if stochastic_emb_mode > 4:
+        name = name + "_STEM" + str(stochastic_emb_mode % 4)
+    elif stochastic_emb_mode > 0:
+        name = name + "_stem" + str(stochastic_emb_mode % 4)
+
     if not quantized_run and repeat_module < 0:
-        name = "sim_" + name
+        name = name + "_sim"
+
+
 
     if weight_flex_bias:
         name += "_flex"
@@ -193,6 +201,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               img_directory = "images",
               abort_norm = False,
               shift_options = 0,
+              stochastic_emb_mode = 0,
               **kwargs):
     
 
@@ -209,7 +218,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         name = base_name(name_or_path, fwd_quant, weight_quant, weight_flex_bias,
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise_str, name,  
-                         prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options,
+                         prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
                          **kwargs) 
 
     print("-" * 80)
@@ -296,7 +305,11 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     base.unet = QUNet2DConditionModel.from_unet(base.unet, weight_quant,  weight_flex_bias, qargs, 
                                                 repeat_module, repeat_model, layer_stats, individual_care, 
                                                 timestep_to_repetition1, calc_mse,
-                                                quantize_embedding, quantize_first, quantize_last, abort_norm)
+                                                quantize_embedding, quantize_first, quantize_last, abort_norm,
+                                                stochastic_emb_mode = stochastic_emb_mode % 4)
+
+    if stochastic_emb_mode > 4:
+        stochastic_emb_mode = 0
 
     if inspection:
         return base.unet
@@ -317,7 +330,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     refiner.unet = QUNet2DConditionModel.from_unet(refiner.unet, weight_quant, weight_flex_bias, qargs, 
                                                    repeat_module, repeat_model, layer_stats, individual_care,
                                                    timestep_to_repetition2, calc_mse,
-                                                   quantize_embedding, quantize_first, quantize_last, abort_norm)
+                                                   quantize_embedding, quantize_first, quantize_last, abort_norm,
+                                                    stochastic_emb_mode = stochastic_emb_mode % 4)
 
 
     idx = 0

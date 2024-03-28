@@ -651,6 +651,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   quantize_first: bool = False,
                   quantize_last: bool = False,
                   abort_norm: bool = False,
+                  stochastic_emb_mode: int = 0,
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -683,7 +684,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
 
         qnet.to(device=unet.device)
-        qnet.quantize_all_weights(weight_quant = weight_quant, weight_flex_bias= weight_flex_bias, exclude=exclude)
+
+        qnet.quantize_all_weights(weight_quant = weight_quant, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = stochastic_emb_mode)
         qnet.quantize_all_gemm_operations(qargs=qargs, exclude=exclude)
 
 
@@ -718,7 +720,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         
         return qnet
 
-    def quantize_all_weights(self, weight_quant: FloatingPoint, weight_flex_bias: bool, exclude: List[str] = []):
+    def quantize_all_weights(self, weight_quant: FloatingPoint, weight_flex_bias: bool, exclude: List[str] = [], 
+                             stochastic_emb_mode: int = 0):
         r"""
         Quantizes all the weights of the model.
 
@@ -726,7 +729,16 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             weight_quant (:class:`~diffusers.quantization.FloatingPoint`):
                 The quantization scheme to use for the weights.
         """
+
+        stochastic_list = {0: [],
+                           1: ["embedding"],
+                           2: ["time_emb"],
+                           3: ["embedding", "time_emb"]}[stochastic_emb_mode]
+
         quantize_op = make_weight_quantizer(weight_quant, weight_flex_bias)
+
+        if len(stochastic_list) > 0:
+            quantize_op_stochastic = make_weight_quantizer(weight_quant, weight_flex_bias, stochastic=True)
 
         with torch.no_grad():
             for name, param in self.named_parameters():
@@ -737,7 +749,15 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                             flag = False
                             break
                     if flag:
-                        param.data = quantize_op(param.data.cuda())
+                        sto_flag = False
+                        for sto in stochastic_list:
+                            if sto in name:
+                                sto_flag = True
+                                break
+                        if sto_flag:
+                            param.data = quantize_op_stochastic(param.data.cuda())
+                        else:
+                            param.data = quantize_op(param.data.cuda())
                         # print(f"Quantized {name}")
 
 

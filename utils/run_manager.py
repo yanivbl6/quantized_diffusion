@@ -72,6 +72,9 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         ]
 
         row_names = ["fp32", "M10E5", "M7E8"]
+    elif experiment in ["M10E5", "M7E8"]:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
+        row_names = ["vanilla"]
     else:
         runs = []
         row_names = []
@@ -137,7 +140,10 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
 def highlight_max(df, exclude = 0):
     # Create a style function
     def style_func(s):
-        is_max = s == s.iloc[1:-exclude].max()
+        if exclude == 0:
+            is_max = s == s.iloc[1:].max()
+        else:
+            is_max = s == s.iloc[1:-exclude].max()
         return ['font-weight: bold' if v else '' for v in is_max]
 
     # Apply the style function to the DataFrame, excluding the first column

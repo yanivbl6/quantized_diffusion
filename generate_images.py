@@ -55,6 +55,10 @@ parser.add_argument('--deterministic', action='store_true')
 
 
 parser.add_argument('--img_directory', type=str, default="images")
+
+parser.add_argument('--stem', type=int, default=0)
+parser.add_argument('--STEM', type=int, default=-1)
+
 ##main
 
 def parse_resolution(resolution):
@@ -77,6 +81,9 @@ if __name__ == "__main__":
 
     if args.mse:
         assert args.repeat_model > 1
+
+    if args.STEM > 0:
+        args.stem = args.STEM + 4
 
     torch.cuda.set_device(args.device)
 
@@ -109,7 +116,7 @@ if __name__ == "__main__":
                         height = height, width = width, include = args.include,
                         scheduler_noise_mode=args.scheduler_noise_mode,
                         img_directory = args.img_directory, clip_score= args.eval, abort_norm = args.abort_norm,
-                        shift_options = args.shift_options,
+                        shift_options = args.shift_options, stochastic_emb_mode= args.stem,
                         **kwargs)
         
         torch.cuda.empty_cache()
