@@ -27,6 +27,8 @@ def get_flags_for_experiment(experiment):
 
     if experiment == "adjusted_emb":
         return {"baseline": True, "adjusted": True, "embedding": True, "no_flex": False, "first": False, "flex": False, "shift1": False}
+    if experiment == "emb":
+        return {"baseline": True, "adjusted": False, "embedding": True, "no_flex": False, "first": False, "flex": False, "shift1": False}
     elif experiment == "adjusted_flex":
         return {"baseline": True, "adjusted": True, "embedding": False, "no_flex": False, "first": False, "flex": True, "shift1": False}
     elif experiment == "all":
@@ -34,7 +36,7 @@ def get_flags_for_experiment(experiment):
     elif experiment == "pre":
         return {"baseline": True, "adjusted": False, "embedding": True, "no_flex": True, "first": True, "flex": True, "shift1": False}
     elif experiment == "flex":
-        return {"baseline": True, "adjusted": False, "embedding": True, "no_flex": False, "first": True, "flex": True, "shift1": False}
+        return {"baseline": True, "adjusted": False, "embedding": True, "no_flex": False, "first": False, "flex": True, "shift1": False}
     elif experiment == "shift1":
         return {"baseline": True, "adjusted": True, "embedding": True, "no_flex": False, "first": False, "flex": False, "shift1": True}
     elif experiment == "expexp":
@@ -42,22 +44,28 @@ def get_flags_for_experiment(experiment):
     elif experiment == "variants":
         return {"baseline": True, "adjusted": True, "embedding": True, "shift1": True, "expexp": True}
     elif experiment == "ablation":
-        return {"adjusted": True, "embedding": True, "ablation": True}
+        return {"adjusted": True, "embedding": True, "ablation": True, "shift1": True, "expexp": True}
     elif experiment == "QN":
         return {"adjusted": True, "embedding": True, "expexp": True, "exact": True}
     elif experiment == "sr":
         return {"adjusted": True, "embedding": True, "nosr": True}
     elif experiment == "nearest":
         return {"embedding": True, "nosr": True}
+    elif experiment == "stem":
+        return {"embedding": True, "stem": True, "STEM": True}
+    elif experiment == "stem_emb":
+        return {"embedding": True, "stem": True, "STEM": True,  "adjusted": True}
     else:
         raise ValueError(f"Unknown experiment: {experiment}, must be one of {list_experiments()}")
 
 def list_experiments():
-    return ["adjusted_emb", "adjusted_flex", "all", "pre", "flex", "shift1", "expexp", "variants", "ablation", "QN", "sr","nearest"]
+    return ["adjusted_emb", "adjusted_flex", "all", "pre", "flex", "shift1", 
+            "expexp", "variants", "ablation", "QN", "sr","nearest",
+            "stem", "stem_emb"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
-                       shift1 = False, expexp = False, ablation = False, exact = False, nosr = False):
+                       shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False):
     
     if experiment_flags is not None:
         experiment_flags = get_flags_for_experiment(experiment_flags)
@@ -73,8 +81,8 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
 
         row_names = ["fp32", "M10E5", "M7E8"]
     elif experiment in ["M10E5", "M7E8"]:
-        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
-        row_names = ["vanilla"]
+        runs = [ f'{directory}/{prompt}x{n_steps}_M23E8' ,f'{directory}/{prompt}x{n_steps}_{experiment}']
+        row_names = ["fp32","vanilla"]
     else:
         runs = []
         row_names = []
