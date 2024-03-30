@@ -51,6 +51,8 @@ def get_flags_for_experiment(experiment):
         return {"adjusted": True, "embedding": True, "nosr": True}
     elif experiment == "nearest":
         return {"embedding": True, "nosr": True}
+    elif experiment == "desperate1":
+        return {"adjusted": True, "embedding": True, "Qfractions": True}
     elif experiment == "stem":
         return {"embedding": True, "stem": True, "STEM": True}
     elif experiment == "stem_emb":
@@ -65,7 +67,8 @@ def list_experiments():
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
-                       shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False):
+                       shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
+                       Qfractions = False):
     
     if experiment_flags is not None:
         experiment_flags = get_flags_for_experiment(experiment_flags)
@@ -165,9 +168,15 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
                 row_names.append(f"stochastic t_emb (+refiner, adjusted)")
                 runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding_adjusted')
                 row_names.append(f"stochastic embs (+refiner, adjusted)")
-
-
-    runs = [(run if run != "images/morgana2x400_M3E4_flex_embedding_adjusted" else "images/morgana2x400_M3E4_flex_embedding_adjusted_again") for run in runs]
+        if Qfractions:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_hundredth_adjusted')
+            row_names.append(f"Q -> Q/100")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_thenth_adjusted')
+            row_names.append(f"Q -> Q/30")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_tenth_adjusted')
+            row_names.append(f"Q -> Q/10")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_third_adjusted')
+            row_names.append(f"Q -> Q/3")
 
     if check_for:
         check_directories(runs, check_for)

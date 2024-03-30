@@ -282,7 +282,13 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                       "tenth": 9,
                       "thenth": 10,
                       "hundredth": 11,
+                      "half": 12,
+                      "quarter": 13,
+                      "fifth": 14,
+                      "eighth": 15,
                     }
+        
+
         assert quantization_noise_mode in quantization_noise_mode_dict, f"quantization_noise_mode should be one of {list(quantization_noise_mode_dict.keys())}"
         self.quantization_noise_mode = quantization_noise_mode_dict[quantization_noise_mode]
 
@@ -387,6 +393,14 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                 quantization_noise[:] = quantization_noise / 30
             elif self.quantization_noise_mode == 11:
                 quantization_noise[:] = quantization_noise / 100
+            elif self.quantization_noise_mode == 12:
+                quantization_noise[:] = quantization_noise / 2
+            elif self.quantization_noise_mode == 13:
+                quantization_noise[:] = quantization_noise / 4
+            elif self.quantization_noise_mode == 14:
+                quantization_noise[:] = quantization_noise / 5
+            elif self.quantization_noise_mode == 15:
+                quantization_noise[:] = quantization_noise / 8
 
             self.repetitions = self.repetitions.to(tsigmas.device)
 
