@@ -169,14 +169,22 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
                 runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding_adjusted')
                 row_names.append(f"stochastic embs (+refiner, adjusted)")
         if Qfractions:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_hundredth_adjusted')
-            row_names.append(f"Q -> Q/100")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_thenth_adjusted')
-            row_names.append(f"Q -> Q/30")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_tenth_adjusted')
-            row_names.append(f"Q -> Q/10")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_half_adjusted')
+            row_names.append(f"Q -> Q/2")
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_third_adjusted')
             row_names.append(f"Q -> Q/3")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_quarter_adjusted')
+            row_names.append(f"Q -> Q/4")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_fifth_adjusted')
+            row_names.append(f"Q -> Q/5")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_eighth_adjusted')
+            row_names.append(f"Q -> Q/8")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_tenth_adjusted')
+            row_names.append(f"Q -> Q/10")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_thenth_adjusted')
+            row_names.append(f"Q -> Q/30")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_hundredth_adjusted')
+            row_names.append(f"Q -> Q/100")
 
     if check_for:
         check_directories(runs, check_for)
@@ -218,10 +226,13 @@ def to_pd(results_dict, results_dict_steps,  col_names):
     return df
 
 
-def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
+def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "morgana2", images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
                 dry = False, quiet = False,
                 pvals = []):
     
+    if not isinstance(prompts, list):
+        prompts = [prompts]
+
     if not isinstance(pvals, list):
         pvals = [pvals]
 
@@ -229,43 +240,49 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], images_per_run
     results_dict_ssim_std = {}
     results_dict_steps = {}
 
-    for experiment in experiments:
-        results_dict_ssim[experiment] = {}
-        results_dict_ssim_std[experiment] = {}
-        results_dict_steps[experiment] = []
-        for n_steps in steps:
-            runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, experiment_flags= experiment_flags)
-            if check_directories(runs, images_per_run):
-                if not quiet:
-                    print(f"Experiment: {experiment}, n_steps: {n_steps}")
-                if dry:
-                    continue
-                ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim+", stop = True)
+
+
+
+    for prompt in prompts:
+        for experiment in experiments:
+            propmpt_experiment = prompt + " " + experiment
+            results_dict_ssim[propmpt_experiment] = {}
+            results_dict_ssim_std[propmpt_experiment] = {}
+            results_dict_steps[propmpt_experiment] = []
+            for n_steps in steps:
+                runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, prompt = prompt, 
+                                                     experiment_flags= experiment_flags)
+                if check_directories(runs, images_per_run):
+                    if not quiet:
+                        print(f"Experiment: {experiment}, n_steps: {n_steps}")
+                    if dry:
+                        continue
+                    ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim+", stop = True)
 
 
 
 
-                ssim = ssim[0,:]
-                std = std[0,:]
+                    ssim = ssim[0,:]
+                    std = std[0,:]
 
-                for k in range(len(row_names)):
-                    if row_names[k] not in results_dict_ssim[experiment]:
-                        results_dict_ssim[experiment][row_names[k]] = []
-                        results_dict_ssim_std[experiment][row_names[k]] = []
-                    results_dict_ssim[experiment][row_names[k]] += [ssim[k]]
-                    results_dict_ssim_std[experiment][row_names[k]] += [std[k]]
+                    for k in range(len(row_names)):
+                        if row_names[k] not in results_dict_ssim[propmpt_experiment]:
+                            results_dict_ssim[propmpt_experiment][row_names[k]] = []
+                            results_dict_ssim_std[propmpt_experiment][row_names[k]] = []
+                        results_dict_ssim[propmpt_experiment][row_names[k]] += [ssim[k]]
+                        results_dict_ssim_std[propmpt_experiment][row_names[k]] += [std[k]]
 
-                for u,v in pvals:
-                    p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim+")
-                    p_row_name = f"Pval({row_names[u]} > {row_names[v]})"
-                    row_names.append(p_row_name)
-                    if p_row_name not in results_dict_ssim[experiment]:
-                        results_dict_ssim[experiment][p_row_name] = []
-                        results_dict_ssim_std[experiment][p_row_name] = []
-                    results_dict_ssim[experiment][p_row_name] += [p]
-                    results_dict_ssim_std[experiment][p_row_name] += [0]
+                    for u,v in pvals:
+                        p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim+")
+                        p_row_name = f"Pval({row_names[u]} > {row_names[v]})"
+                        row_names.append(p_row_name)
+                        if p_row_name not in results_dict_ssim[propmpt_experiment]:
+                            results_dict_ssim[propmpt_experiment][p_row_name] = []
+                            results_dict_ssim_std[propmpt_experiment][p_row_name] = []
+                        results_dict_ssim[propmpt_experiment][p_row_name] += [p]
+                        results_dict_ssim_std[propmpt_experiment][p_row_name] += [0]
 
-                results_dict_steps[experiment] += [n_steps]
+                    results_dict_steps[propmpt_experiment] += [n_steps]
     df = to_pd(results_dict_ssim, results_dict_steps, row_names)
 
     df_styled = highlight_max(df, len(pvals))
