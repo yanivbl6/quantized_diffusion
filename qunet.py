@@ -752,7 +752,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
         with torch.no_grad():
             for name, param in self.named_parameters():
-                self.weight_dict_copy[name] = param.data.clone().half()
+                self.weight_dict_copy[name] = param.data.clone().cpu()
         
     def restore_all_weights_from_cpu(self):
         r"""
@@ -760,7 +760,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         """
         with torch.no_grad():
             for name, param in self.named_parameters():
-                param.data = self.weight_dict_copy[name].clone().float()
+                param.data = self.weight_dict_copy[name].clone().cuda()
 
         self.quantize_all_weights(weight_quant = self.weight_quant, 
                                   weight_flex_bias= self.weight_flex_bias, 
