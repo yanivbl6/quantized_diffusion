@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+from time import time
 
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import UNet2DConditionLoadersMixin
@@ -652,6 +653,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   quantize_last: bool = False,
                   abort_norm: bool = False,
                   stochastic_emb_mode: int = 0,
+                  stochastic_weights_freq: int = 0,
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -659,6 +661,9 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         Args:
             unet (:class:`~diffusers
         """
+
+        if stochastic_weights_freq > 0 and stochastic_emb_mode == 0:
+            stochastic_emb_mode = 4
 
 
         dtype = unet.conv_in.weight.dtype
@@ -683,26 +688,42 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             exclude = exclude + ["conv_out", "conv_norm"]
 
 
+
         qnet.to(device=unet.device)
 
-        qnet.quantize_all_weights(weight_quant = weight_quant, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = stochastic_emb_mode)
+
+
+        
         qnet.quantize_all_gemm_operations(qargs=qargs, exclude=exclude)
 
+        qnet.stochastic_weights_freq = stochastic_weights_freq  
+        if stochastic_weights_freq > 0:
+            qnet.store_all_weights_on_cpu()
+            qnet.stochastic_emb_mode = stochastic_emb_mode
+            qnet.weight_quant = weight_quant
+            qnet.weight_flex_bias = weight_flex_bias
+            qnet.exclude = exclude
+            qnet.steps_with_stochastic_weights = 0
+        
+        qnet.quantize_all_weights(weight_quant = weight_quant, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = stochastic_emb_mode)
 
-        qnet.dynamic_repeats = repeat_module_count < 0
+        qnet.dynamic_repeats = repeat_module_count < 0 and not stochastic_weights_freq > 0
+
         if qnet.dynamic_repeats:
             repeat_module_count = 1
+
         qnet.repeat_model_count = repeat_model_count
         qnet.repeat_module_count = repeat_module_count
 
         qnet.repeat_modules_list = []
 
+        if not stochastic_weights_freq > 0:
+            if not individual_care:
+                qnet.move_computation_modules_to_repeat_module_count(repeat_module_count,layer_stats)
+                
+            nested = qnet.check_for_nested_repeat_module_count(repeat_module_count,layer_stats)
 
-        if not individual_care:
-            qnet.move_computation_modules_to_repeat_module_count(repeat_module_count,layer_stats)
-            
-        nested = qnet.check_for_nested_repeat_module_count(repeat_module_count,layer_stats)
-        assert not nested, "Nested repeat modules are not supported."
+            assert not nested, "Nested repeat modules are not supported."
 
         if repeat_model_count > 1:
             if calc_mse:
@@ -718,9 +739,37 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
         qnet.set_abort_norm(False)
         
+
+
         return qnet
 
-    def quantize_all_weights(self, weight_quant: FloatingPoint, weight_flex_bias: bool, exclude: List[str] = [], 
+
+    def store_all_weights_on_cpu(self):
+        r"""
+        Stores all the weights on the CPU.
+        """
+        self.weight_dict_copy = {}
+
+        with torch.no_grad():
+            for name, param in self.named_parameters():
+                self.weight_dict_copy[name] = param.data.clone().half()
+        
+    def restore_all_weights_from_cpu(self):
+        r"""
+        Restores all the weights from the CPU.
+        """
+        with torch.no_grad():
+            for name, param in self.named_parameters():
+                param.data = self.weight_dict_copy[name].clone().float()
+
+        self.quantize_all_weights(weight_quant = self.weight_quant, 
+                                  weight_flex_bias= self.weight_flex_bias, 
+                                  exclude=self.exclude,  
+                                  stochastic_emb_mode = self.stochastic_emb_mode)
+
+    def quantize_all_weights(self, weight_quant: FloatingPoint, 
+                             weight_flex_bias: bool, 
+                             exclude: List[str] = [], 
                              stochastic_emb_mode: int = 0):
         r"""
         Quantizes all the weights of the model.
@@ -733,7 +782,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         stochastic_list = {0: [],
                            1: ["embedding"],
                            2: ["time_emb"],
-                           3: ["embedding", "time_emb"]}[stochastic_emb_mode]
+                           3: ["embedding", "time_emb"],
+                           4: ["all"]}[stochastic_emb_mode]
 
         quantize_op = make_weight_quantizer(weight_quant, weight_flex_bias)
 
@@ -751,7 +801,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                     if flag:
                         sto_flag = False
                         for sto in stochastic_list:
-                            if sto in name:
+                            if sto in name or sto == "all":
                                 sto_flag = True
                                 break
                         if sto_flag:
@@ -1502,6 +1552,12 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         if USE_PEFT_BACKEND:
             # remove `lora_scale` from each PEFT layer
             unscale_lora_layers(self, lora_scale)
+
+        if self.stochastic_weights_freq > 0:
+            self.steps_with_stochastic_weights += 1
+            if self.steps_with_stochastic_weights % self.stochastic_weights_freq == 0:
+                self.restore_all_weights_from_cpu()
+                self.steps_with_stochastic_weights = 0
 
         if not return_dict:
             return (sample,)

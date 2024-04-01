@@ -55,6 +55,12 @@ def get_flags_for_experiment(experiment):
         return {"adjusted": True, "embedding": True, "Qfractions": True}
     elif experiment == "stem":
         return {"embedding": True, "stem": True, "STEM": True}
+    elif experiment == "partial":
+        return {"embedding": True, "partialQ": True}
+    elif experiment == "stoch_w":
+        return {"embedding": True, "stochastic_weights": True}
+    elif experiment == "stoch_w_adj":
+        return {"embedding": True, "stochastic_weights": True, "adjusted": True}
     elif experiment == "stem_emb":
         return {"embedding": True, "stem": True, "STEM": True,  "adjusted": True}
     else:
@@ -63,12 +69,12 @@ def get_flags_for_experiment(experiment):
 def list_experiments():
     return ["adjusted_emb", "adjusted_flex", "all", "pre", "flex", "shift1", 
             "expexp", "variants", "ablation", "QN", "sr","nearest",
-            "stem", "stem_emb"]
+            "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
-                       Qfractions = False):
+                       Qfractions = False, partialQ = False, stochastic_weights = False):
     
     if experiment_flags is not None:
         experiment_flags = get_flags_for_experiment(experiment_flags)
@@ -185,6 +191,36 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             row_names.append(f"Q -> Q/30")
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_hundredth_adjusted')
             row_names.append(f"Q -> Q/100")
+        if partialQ:
+            runs.append(f'{directory}/{prompt}x{n_steps}_A_M23E8_W_{experiment}_flex_embedding')
+            row_names.append(f"Q_a")
+            runs.append(f'{directory}/{prompt}x{n_steps}_A_{experiment}_W_M23E8_flex_embedding')
+            row_names.append(f"Q_w")
+
+        if stochastic_weights:
+            # morgana2x100_M4E3_stoWeights_1_STEM3_flex_embedding
+            # morgana2x100_M4E3_stoWeights_1_STEM0_flex_embedding
+            # morgana2x100_M4E3_stoWeights_1_STEM1_flex_embedding
+            # morgana2x100_M4E3_stoWeights_1_STEM2_flex_embedding
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM0_flex_embedding')
+            row_names.append(f"stochastic weights (all)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM1_flex_embedding')
+            row_names.append(f"stochastic weights (p_emb)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM2_flex_embedding')
+            row_names.append(f"stochastic weights (t_emb)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding')
+            row_names.append(f"stochastic weights (embs)")
+            if adjusted:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM0_flex_embedding_adjusted')
+                row_names.append(f"adjusted stochastic weights (all)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM1_flex_embedding_adjusted')
+                row_names.append(f"adjusted stochastic weights (p_emb)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM2_flex_embedding_adjusted')
+                row_names.append(f"adjusted stochastic weights (t_emb)")
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding_adjusted')
+                row_names.append(f"adjusted stochastic weights (embs)")
+
+
 
     if check_for:
         check_directories(runs, check_for)
