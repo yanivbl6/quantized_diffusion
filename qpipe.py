@@ -77,6 +77,7 @@ def base_name(
     shift_options: int,
     stochastic_emb_mode: int = 0,
     stochastic_weights_freq: int = 0,
+    intermediate_weight_quantization: str = "M23E8",
     **kwargs,
 ) -> str:
     
@@ -88,7 +89,10 @@ def base_name(
         name = name + "A_" + fwd_quant + "_W_" + weight_quant
 
     if stochastic_weights_freq > 0:
-        name = name + "_stoWeights_" + str(stochastic_weights_freq)
+        name = name + "_stoWeights"
+
+        if intermediate_weight_quantization != "M23E8":
+            name = name + "_with_" + intermediate_weight_quantization
 
     if stochastic_emb_mode >= 4:
         name = name + "_STEM" + str(stochastic_emb_mode % 4)
@@ -207,6 +211,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               shift_options = 0,
               stochastic_emb_mode = 0,
               stochastic_weights_freq = 0,
+              intermediate_weight_quantization = "M23E8",
               **kwargs):
     
 
@@ -224,7 +229,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
-                         stochastic_weights_freq, 
+                         stochastic_weights_freq, intermediate_weight_quantization,
                          **kwargs) 
 
     print("-" * 80)
@@ -304,6 +309,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     fwd_quant = parse_quant(fwd_quant)
     weight_quant = parse_quant(weight_quant)
+    intermediate_weight_quantization = parse_quant(intermediate_weight_quantization)
     qargs = {'activate': fwd_quant}
     ## add kwargs to qargs
     qargs.update(kwargs)
@@ -313,7 +319,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                 timestep_to_repetition1, calc_mse,
                                                 quantize_embedding, quantize_first, quantize_last, abort_norm,
                                                 stochastic_emb_mode = stochastic_emb_mode % 4,
-                                                stochastic_weights_freq = stochastic_weights_freq)
+                                                stochastic_weights_freq = stochastic_weights_freq,
+                                                intermediate_weight_quantization = intermediate_weight_quantization)
 
     if stochastic_emb_mode > 4:
         stochastic_emb_mode = 0
@@ -339,7 +346,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                    timestep_to_repetition2, calc_mse,
                                                    quantize_embedding, quantize_first, quantize_last, abort_norm,
                                                     stochastic_emb_mode = stochastic_emb_mode % 4,
-                                                    stochastic_weights_freq = stochastic_weights_freq)
+                                                    stochastic_weights_freq = stochastic_weights_freq,
+                                                    intermediate_weight_quantization = intermediate_weight_quantization)
 
     idx = 0
 

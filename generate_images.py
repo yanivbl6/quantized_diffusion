@@ -59,6 +59,9 @@ parser.add_argument('--img_directory', type=str, default="images")
 parser.add_argument('--stem', type=int, default=0)
 parser.add_argument('--STEM', type=int, default=0)
 parser.add_argument('--stochastic_weights_freq', type=int, default=0)
+
+parser.add_argument('--intermediate_weight_quantization', type=str, default="M23E8")
+
 ##main
 
 def parse_resolution(resolution):
@@ -118,6 +121,7 @@ if __name__ == "__main__":
                         img_directory = args.img_directory, clip_score= args.eval, abort_norm = args.abort_norm,
                         shift_options = args.shift_options, stochastic_emb_mode= args.stem, 
                         stochastic_weights_freq = args.stochastic_weights_freq, 
+                        intermediate_weight_quantization = args.intermediate_weight_quantization,
                         **kwargs)
         
         torch.cuda.empty_cache()

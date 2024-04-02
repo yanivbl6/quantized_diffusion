@@ -654,6 +654,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   abort_norm: bool = False,
                   stochastic_emb_mode: int = 0,
                   stochastic_weights_freq: int = 0,
+                  intermediate_weight_quantization: FloatingPoint = None,
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -698,6 +699,10 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
         qnet.stochastic_weights_freq = stochastic_weights_freq  
         if stochastic_weights_freq > 0:
+            if intermediate_weight_quantization.man < 23:
+                ## quantize the weights to the intermediate precision, using nearest rounding.
+                qnet.quantize_all_weights(weight_quant = intermediate_weight_quantization, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = 0)
+
             qnet.store_all_weights_on_cpu()
             qnet.stochastic_emb_mode = stochastic_emb_mode
             qnet.weight_quant = weight_quant
