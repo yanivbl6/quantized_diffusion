@@ -78,6 +78,7 @@ def base_name(
     stochastic_emb_mode: int = 0,
     stochastic_weights_freq: int = 0,
     intermediate_weight_quantization: str = "M23E8",
+    dtype: torch.dtype = torch.float32,
     **kwargs,
 ) -> str:
     
@@ -138,6 +139,9 @@ def base_name(
             name += "_nearest" 
         else:
             name += "_rounding_" + kwargs['activate_rounding']
+
+    # if dtype == torch.float16:
+    #     name += "_fp16"
 
     return name
 
@@ -229,8 +233,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
-                         stochastic_weights_freq, intermediate_weight_quantization,
-                         **kwargs) 
+                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype, **kwargs) 
 
     print("-" * 80)
     print("Running: ", name)

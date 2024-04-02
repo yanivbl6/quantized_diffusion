@@ -140,6 +140,11 @@ class Quantizer(nn.Module):
 
     def forward(self, x, dim=None):
 
+        mtype = x.dtype
+
+        if mtype == torch.float16:
+            x = x.float()
+
         if not self.on:
             return x
 
@@ -178,6 +183,9 @@ class Quantizer(nn.Module):
         
         if self.use_qdrop and self.training:
             out = mask*out + (1-mask)*x_
+
+        if mtype == torch.float16:
+            out = out.half()
 
         return out
     
