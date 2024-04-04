@@ -79,6 +79,7 @@ def base_name(
     stochastic_weights_freq: int = 0,
     intermediate_weight_quantization: str = "M23E8",
     dtype: torch.dtype = torch.float32,
+    prolong: int = 1,
     **kwargs,
 ) -> str:
     
@@ -126,6 +127,9 @@ def base_name(
         if quantization_noise != "linexp":
             name += "_QN_" + str(quantization_noise)
 
+    if prolong > 1:
+        name += "_X" + str(prolong)
+
     if calc_mse:
         name += "_stats"
 
@@ -141,8 +145,11 @@ def base_name(
         else:
             name += "_rounding_" + kwargs['activate_rounding']
 
+
     if dtype == torch.float32:
         name += "_fp32"
+
+    
 
     return name
 
@@ -217,6 +224,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               stochastic_emb_mode = 0,
               stochastic_weights_freq = 0,
               intermediate_weight_quantization = "M23E8",
+              prolong = 1,
               **kwargs):
     
 
@@ -233,7 +241,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
-                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , **kwargs) 
+                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , prolong = prolong, **kwargs) 
 
     print("-" * 80)
     print("Running: ", name)
@@ -327,6 +335,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if inspection:
         return base.unet
 
+    n_steps2 = n_steps * prolong
+
     if use_adjusted_scheduler:
         refiner.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(refiner.scheduler, 
                                                                            quantization_noise = quantization_noise,
@@ -336,9 +346,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                             shift_options = shift_options,
                                                                             act_m = fwd_quant.man,
                                                                             inter_m = intermediate_weight_quantization.man)
-        refiner.scheduler.set_timesteps(n_steps1)
+        refiner.scheduler.set_timesteps(n_steps2)
 
-    
     
     timestep_to_repetition2 = None
 
@@ -388,7 +397,10 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                     'idx': idx, 'version': 6, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
                     'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
                     'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str, "abort_norm": abort_norm,
-                    'calc_mse': calc_mse, 'shift_options': shift_options, 'rounding': kwargs.get('activate_rounding', 'stochastic')}
+                    'calc_mse': calc_mse, 'shift_options': shift_options, 'rounding': kwargs.get('activate_rounding', 'stochastic'),
+                    'stochastic_emb_mode': stochastic_emb_mode, 'stochastic_weights_freq': stochastic_weights_freq, 
+                    'intermediate_weight_quantization_man': intermediate_weight_quantization.man, 'intermediate_weight_quantization_exp': intermediate_weight_quantization.exp,
+                    'prolong': prolong}
             
             args.update(kwargs)
 
@@ -418,7 +430,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
             ).images
             image = refiner(
                 prompt=pprompt,
-                num_inference_steps=n_steps1,
+                num_inference_steps=n_steps2,
                 denoising_start=high_noise_frac,
                 image=image,
                 generator=generator,

@@ -65,6 +65,9 @@ parser.add_argument('-p','--plus_bits_for_stochastic_weights', type=int, default
 
 parser.add_argument('--fp32', action='store_true')
 
+
+parser.add_argument('-x','--prolong', type=int, default=1)
+
 ##main
 
 def parse_resolution(resolution):
@@ -140,7 +143,7 @@ if __name__ == "__main__":
                         shift_options = args.shift_options, stochastic_emb_mode= args.stem, 
                         stochastic_weights_freq = args.stochastic_weights_freq, 
                         intermediate_weight_quantization = args.intermediate_weight_quantization,
-                        dtype = torch.float32 if args.fp32 else torch.float16,
+                        dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
                         **kwargs)
         
         torch.cuda.empty_cache()

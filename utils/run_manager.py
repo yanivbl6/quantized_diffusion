@@ -77,7 +77,7 @@ def list_experiments():
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
-                       Qfractions = False, partialQ = False, stochastic_weights = False, plus4 = False):
+                       Qfractions = False, partialQ = False, stochastic_weights = False, plus4 = False, plus = -1, extended = False):
     
     if experiment_flags is not None:
 
@@ -237,6 +237,17 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
                 runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding_adjusted')
                 row_names.append(f"adjusted stochastic weights (embs)")
 
+        if plus > 0:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding')
+            row_names.append(f"+{plus}")
+
+        if extended and plus > 0:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X2')
+            row_names.append(f"+{plus}, x2")
+            # runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
+            # row_names.append(f"+{plus}, x3")
+            # runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
+            # row_names.append(f"+{plus}, x4")
 
 
     if check_for:

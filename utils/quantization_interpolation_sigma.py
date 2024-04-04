@@ -66,6 +66,5 @@ def interpolate_quantization_noise(act_m, inter_m, style, sigmas):
 def linexp(sigmas, q_0, q_T):
     a = np.log(q_0/q_T)/np.log(sigmas[0]/sigmas[-2])
     b = np.exp(np.log(q_0) - a*np.log(sigmas[0]))
-    q_std_hat = b*sigmas**(a)
-    q_std_hat = torch.tensor(q_std_hat[:-1], dtype=torch.float32)
+    q_std_hat = b*sigmas[:-1]**(a)
     return q_std_hat
