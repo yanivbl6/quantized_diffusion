@@ -15,20 +15,19 @@ parser = argparse.ArgumentParser(description='Run parameters with their default 
 
 parser.add_argument('-n','--n_steps', type=int, default=40)
 parser.add_argument('--high_noise_frac', type=float, default=0.8)
-parser.add_argument('--prompt', type=str, default="lion")
+parser.add_argument('--prompt', type=str, default="morgana2")
 parser.add_argument('-W','--weight_quant', type=str, default=None)
 parser.add_argument('-A','--fwd_quant', type=str, default="M23E8")
 parser.add_argument('-f','--flex_bias', action='store_true')
-parser.add_argument('-N', '--samples', type=int, default=1)
+parser.add_argument('-N', '--samples', type=int, default=64)
 parser.add_argument('-r', '--repeat_module', type=int, default=1)
 parser.add_argument('-R', '--repeat_model', type=int, default=1)
 parser.add_argument('--layer_stats', action='store_true')
 parser.add_argument('-I', '--individual_care', action='store_true')
 parser.add_argument('-i','--inspection', action='store_true')
 parser.add_argument('-g','--gamma_threshold', type=float, default=1)
-parser.add_argument('-q','--quantized_run', action='store_true')
-parser.add_argument('-Q','--quantization_noise', type=str, default="cosh")
-parser.add_argument('-E', '--use_quantized_euler', action='store_true')
+parser.add_argument('--sim', action='store_true')
+parser.add_argument('-Q','--quantization_noise', type=str, default="none")
 
 parser.add_argument('--mse', action='store_true')
 parser.add_argument('--abort_norm', action='store_true')
@@ -43,7 +42,7 @@ parser.add_argument('--eval', action='store_true')
 parser.add_argument('--name', type=str, default="")
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--resolution', type=str, default="1024:1024")
-parser.add_argument('--include', type=str, default="")
+parser.add_argument('--include', type=str, default="embedding")
 parser.add_argument('-S','--scheduler_noise_mode', type=str, default="dynamic")
 
 parser.add_argument('--wandb', action='store_true')
@@ -62,6 +61,7 @@ parser.add_argument('--stochastic_weights_freq', type=int, default=0)
 
 parser.add_argument('--intermediate_weight_quantization', type=str, default="M23E8")
 
+parser.add_argument('-p','--plus_bits_for_stochastic_weights', type=int, default=0)
 
 parser.add_argument('--fp32', action='store_true')
 
@@ -79,11 +79,26 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+
+
+
+
     if args.weight_quant is None:
         args.weight_quant = args.fwd_quant
 
-    if args.use_quantized_euler:
-        args.repeat_module = -1
+    if args.plus_bits_for_stochastic_weights != 0:
+
+        if args.plus_bits_for_stochastic_weights < 0:
+            man = 23
+            exp = 8
+        else:
+            fwd_quant = parse_quant(args.fwd_quant)
+            man = fwd_quant.man + args.plus_bits_for_stochastic_weights
+            exp = fwd_quant.exp
+
+        args.intermediate_weight_quantization = f"M{man}E{exp}"
+        args.stochastic_weights_freq = 1
+        args.STEM = 4
 
     if args.mse:
         assert args.repeat_model > 1
@@ -93,7 +108,7 @@ if __name__ == "__main__":
 
     torch.cuda.set_device(args.device)
 
-    kwargs = {"quantization_noise": args.quantization_noise, "gamma_threshold": args.gamma_threshold, "quantized_run": args.quantized_run}
+    kwargs = {"quantization_noise": args.quantization_noise, "gamma_threshold": args.gamma_threshold, "quantized_run": not args.sim}
 
     if args.noSR:
         kwargs["activate_rounding"] = "nearest"
@@ -109,7 +124,7 @@ if __name__ == "__main__":
     if args.n_steps > 0:
         all_steps = [args.n_steps]
     else:
-        all_steps = [100, 200, 400, 800]
+        all_steps = [50, 100, 200, 400, 800]
 
     for n_steps in all_steps:
         image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 

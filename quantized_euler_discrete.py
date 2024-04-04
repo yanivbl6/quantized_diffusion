@@ -28,6 +28,8 @@ from diffusers.schedulers import EulerDiscreteScheduler
 
 import wandb
 
+from utils.quantization_interpolation_sigma  import interpolate_quantization_noise
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -304,11 +306,13 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
     @staticmethod
     def from_scheduler(scheduler: EulerDiscreteScheduler, 
-                        quantization_noise: Optional[Union[torch.Tensor, float]] = None, 
+                        quantization_noise = None, 
                         gamma_threshold: float = 0.0,
                         quantized_run: bool = False,
                         quantization_noise_mode: str = "dynamic",
                         shift_options: int = 0,
+                        act_m: int = 4,
+                        inter_m: int = 0,
                         ):
         config = scheduler.config
         config["_class_name"] = "ModifiedEulerDiscreteScheduler"
@@ -323,6 +327,9 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
 
         sched = QuantizedEulerDiscreteScheduler.from_config(config)
+
+        sched.act_m = act_m
+        sched.inter_m = inter_m
 
         return sched
 
@@ -414,12 +421,12 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
             gammas = calculate_gamma(quantization_noise, sigma_ratio, self.shift_options)
 
 
-
-            gamma_threshold = torch.tensor(gamma_threshold, device = gammas.device)
-            while torch.any(gammas > gamma_threshold):
-                self.repetitions[gammas > gamma_threshold] += 1
-                new_quantization_noise = quantization_noise / torch.sqrt(self.repetitions)
-                gammas = calculate_gamma(new_quantization_noise, sigma_ratio, self.shift_options)
+            ## redacted
+            # gamma_threshold = torch.tensor(gamma_threshold, device = gammas.device)
+            # while torch.any(gammas > gamma_threshold):
+            #     self.repetitions[gammas > gamma_threshold] += 1
+            #     new_quantization_noise = quantization_noise / torch.sqrt(self.repetitions)
+            #     gammas = calculate_gamma(new_quantization_noise, sigma_ratio, self.shift_options)
 
             self.gammas = gammas
 
@@ -532,6 +539,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
 
 
+
+
         # TODO: Support the full EDM scalings for all prediction types and timestep types
         if self.config.timestep_type == "continuous" and self.config.prediction_type == "v_prediction":
             self.timesteps = torch.Tensor([0.25 * sigma.log() for sigma in sigmas]).to(device=device)
@@ -540,6 +549,9 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
 
         self.sigmas = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
+
+        if isinstance(self.quantization_noise, str):
+            self.quantization_noise = interpolate_quantization_noise(self.act_m, self.inter_m, self.quantization_noise, self.sigmas )
 
         self.prepare_for_noise(self.quantization_noise, self.gamma_threshold, num_inference_steps, sigmas)
 
@@ -776,10 +788,8 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                            }
 
             if isinstance(self.quantization_noise, torch.Tensor):
-                if self.quantization_noise.shape[0] == len(self.sigmas):
+                if self.step_index < self.quantization_noise.shape[0]:
                     report_dict["quantization_noise"] = self.quantization_noise[self.step_index]
-                else:
-                    report_dict["quantization_noise"] = self.quantization_noise
 
             wandb.log(report_dict, commit=True)
 

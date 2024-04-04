@@ -201,11 +201,15 @@ def plot_hybrid_grid(name, runs, idxes=0,directory = "images", per_page = None, 
 
 def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3, name = None,
                  display_mse = False, display_is = False,  display_ssim = False,
-                 repeat_baseline = True):
+                 repeat_baseline = True, titles = None):
 
     beginning = runs[0].split("/")[1].split("_")[0]
     name = beginning + (("_" + name) if name is not None else beginning)
 
+    if titles is None:
+        titles = [run.split("/")[-1] for run in runs]
+    else:
+        assert len(titles) == len(runs), "Number of titles must be equal to the number of runs"
 
     if isinstance(idxes, int):
         idxes = list(range(idxes))
@@ -269,7 +273,7 @@ def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3
             
             image = images[i]
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            title = runs[i].split("/")[-1]
+            title = titles[i]
             cv2.putText(image, title, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
             if display_mse:
                 mse = mses[j,i]

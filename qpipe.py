@@ -116,14 +116,15 @@ def base_name(
 
     if repeat_module > 1:
         name += "_x" + str(repeat_module)
-    elif repeat_module < 0:
+    
+    if quantization_noise is not None and quantization_noise.lower() != "none":
         name += "_adjusted"
 
-    if shift_options > 0:
-        name += "_shift" + str(shift_options)
+        if shift_options > 0:
+            name += "_shift" + str(shift_options)
 
-    if quantization_noise != "cosh" and quantization_noise != "":
-        name += "_QN_" + str(quantization_noise)
+        if quantization_noise != "linexp":
+            name += "_QN_" + str(quantization_noise)
 
     if calc_mse:
         name += "_stats"
@@ -140,8 +141,8 @@ def base_name(
         else:
             name += "_rounding_" + kwargs['activate_rounding']
 
-    # if dtype == torch.float16:
-    #     name += "_fp16"
+    if dtype == torch.float32:
+        name += "_fp32"
 
     return name
 
@@ -223,17 +224,16 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     pprompt, nprompt = get_prompt(prompt)
 
-    quantization_noise_str = ""
-    if repeat_module< 0 and isinstance(quantization_noise, str):
-        quantization_noise_str = quantization_noise
-        quantization_noise = interpolate_quantization_noise(fwd_quant, quantization_noise, n_steps, include=include)
+
+
+    quantization_noise_str = quantization_noise
 
     if isinstance(fwd_quant, str) and isinstance(weight_quant, str):
         name = base_name(name_or_path, fwd_quant, weight_quant, weight_flex_bias,
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
-                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype, **kwargs) 
+                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , **kwargs) 
 
     print("-" * 80)
     print("Running: ", name)
@@ -281,41 +281,37 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     refiner.to("cuda")
 
-    if repeat_module < 0:
-        # name = name + "_g_" + "{:.0e}".format(gamma_threshold)
+    fwd_quant = parse_quant(fwd_quant)
+    weight_quant = parse_quant(weight_quant)
+    if stochastic_weights_freq > 0:
+        intermediate_weight_quantization = parse_quant(intermediate_weight_quantization)
+    else:
+        intermediate_weight_quantization = weight_quant 
+    qargs = {'activate': fwd_quant}
+    ## add kwargs to qargs
+    qargs.update(kwargs)
+
+
+    use_adjusted_scheduler = quantization_noise is not None and quantization_noise != "none"
+
+    if use_adjusted_scheduler:
         base.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(base.scheduler, 
                                                                         quantization_noise = quantization_noise,
                                                                         gamma_threshold = gamma_threshold,
                                                                         quantized_run = quantized_run,
                                                                         quantization_noise_mode = scheduler_noise_mode,
-                                                                        shift_options = shift_options)
+                                                                        shift_options = shift_options,
+                                                                        act_m = fwd_quant.man,
+                                                                        inter_m = intermediate_weight_quantization.man)
         
         base.scheduler.set_timesteps(n_steps)
 
 
-        n_steps1 = n_steps
-        # n_steps1 = base.scheduler.get_adjusted_timesteps()
-        
-        # base.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(base.scheduler, 
-        #                                                                 quantization_noise = quantization_noise,
-        #                                                                 gamma_threshold = gamma_threshold,
-        #                                                                 quantized_run = quantized_run)
-
-        # base.scheduler.set_timesteps(n_steps1)
-
-        timestep_to_repetition1 = base.scheduler.make_repetition_plan()
+    n_steps1 = n_steps
+    
+    timestep_to_repetition1 = None
 
 
-    else:
-        n_steps1 = n_steps
-        timestep_to_repetition1 = None
-
-    fwd_quant = parse_quant(fwd_quant)
-    weight_quant = parse_quant(weight_quant)
-    intermediate_weight_quantization = parse_quant(intermediate_weight_quantization)
-    qargs = {'activate': fwd_quant}
-    ## add kwargs to qargs
-    qargs.update(kwargs)
 
     base.unet = QUNet2DConditionModel.from_unet(base.unet, weight_quant,  weight_flex_bias, qargs, 
                                                 repeat_module, repeat_model, layer_stats, individual_care, 
@@ -331,18 +327,20 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if inspection:
         return base.unet
 
-    if repeat_module < 0:
+    if use_adjusted_scheduler:
         refiner.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(refiner.scheduler, 
                                                                            quantization_noise = quantization_noise,
                                                                             gamma_threshold = gamma_threshold,
                                                                             quantized_run = quantized_run,
                                                                             quantization_noise_mode = scheduler_noise_mode,
-                                                                            shift_options = shift_options)
+                                                                            shift_options = shift_options,
+                                                                            act_m = fwd_quant.man,
+                                                                            inter_m = intermediate_weight_quantization.man)
         refiner.scheduler.set_timesteps(n_steps1)
-        timestep_to_repetition2 = refiner.scheduler.make_repetition_plan()
 
-    else:
-        timestep_to_repetition2 = None
+    
+    
+    timestep_to_repetition2 = None
 
     refiner.unet = QUNet2DConditionModel.from_unet(refiner.unet, weight_quant, weight_flex_bias, qargs, 
                                                    repeat_module, repeat_model, layer_stats, individual_care,

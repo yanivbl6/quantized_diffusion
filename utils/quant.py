@@ -142,11 +142,11 @@ class Quantizer(nn.Module):
 
         mtype = x.dtype
 
-        if mtype == torch.float16:
-            x = x.float()
-
         if not self.on:
             return x
+
+        if mtype == torch.float16:
+            x = x.float()
 
         if self.use_qdrop and self.training:
             x_ = x.clone()
@@ -158,7 +158,6 @@ class Quantizer(nn.Module):
             assert dim is None, "Flex bias not supported for dim != None"
 
             if e == 0:
-
                 if len(x.shape) == 4:
                     c = x.abs().max(dim=0, keepdim=True)[0].max(dim=1, keepdim=True)[0]
                 elif len(x.shape) == 3:
@@ -184,7 +183,7 @@ class Quantizer(nn.Module):
         if self.use_qdrop and self.training:
             out = mask*out + (1-mask)*x_
 
-        if mtype == torch.float16:
+        if mtype != torch.float32:
             out = out.half()
 
         return out
@@ -210,9 +209,21 @@ def make_weight_quantizer(weights_number: FloatingPoint = FloatingPoint(8, 23), 
     else:
         quant = torch.nn.Identity()
 
-
     return quant
 
+
+class dummy_quantizer(nn.Module):
+    def __init__(self):
+        super(dummy_quantizer, self).__init__()
+
+    def forward(self, x):
+        return x
+    
+    def disable(self):
+        pass
+
+    def enable(self):
+        pass
 
 def make_block_quantizer(activate: FloatingPoint = FloatingPoint(8, 23),
                          error: FloatingPoint = FloatingPoint(8, 23),
@@ -236,5 +247,4 @@ def make_block_quantizer(activate: FloatingPoint = FloatingPoint(8, 23),
             qdrop,
             )
     else:
-        ##print("Making dummy quantizer")
-        return torch.nn.Identity()
+        return dummy_quantizer()

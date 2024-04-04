@@ -697,11 +697,37 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         
         qnet.quantize_all_gemm_operations(qargs=qargs, exclude=exclude)
 
+
+        
+
+        qnet.dynamic_repeats = repeat_module_count < 0 
+
+        if qnet.dynamic_repeats:
+            repeat_module_count = 1
+
+        qnet.repeat_model_count = repeat_model_count
+        qnet.repeat_module_count = repeat_module_count
+        qnet.calc_mse = calc_mse
+        qnet.repeat_modules_list = []
+
+        if not individual_care:
+            qnet.move_computation_modules_to_repeat_module_count(repeat_module_count,layer_stats)
+            
+        nested = qnet.check_for_nested_repeat_module_count(repeat_module_count,layer_stats)
+
+        assert not nested, "Nested repeat modules are not supported."
+
+
+
+
+
         qnet.stochastic_weights_freq = stochastic_weights_freq  
-        if stochastic_weights_freq > 0:
-            if intermediate_weight_quantization.man < 23:
+        if stochastic_weights_freq > 0 or calc_mse:
+            if intermediate_weight_quantization.man < 23 and not calc_mse:
                 ## quantize the weights to the intermediate precision, using nearest rounding.
                 qnet.quantize_all_weights(weight_quant = intermediate_weight_quantization, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = 0)
+
+            qnet.intermediate_weight_quantization = intermediate_weight_quantization
 
             qnet.store_all_weights_on_cpu()
             qnet.stochastic_emb_mode = stochastic_emb_mode
@@ -709,26 +735,9 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             qnet.weight_flex_bias = weight_flex_bias
             qnet.exclude = exclude
             qnet.steps_with_stochastic_weights = 0
-        
+            
+
         qnet.quantize_all_weights(weight_quant = weight_quant, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = stochastic_emb_mode)
-
-        qnet.dynamic_repeats = repeat_module_count < 0 and not stochastic_weights_freq > 0
-
-        if qnet.dynamic_repeats:
-            repeat_module_count = 1
-
-        qnet.repeat_model_count = repeat_model_count
-        qnet.repeat_module_count = repeat_module_count
-
-        qnet.repeat_modules_list = []
-
-        if not stochastic_weights_freq > 0:
-            if not individual_care:
-                qnet.move_computation_modules_to_repeat_module_count(repeat_module_count,layer_stats)
-                
-            nested = qnet.check_for_nested_repeat_module_count(repeat_module_count,layer_stats)
-
-            assert not nested, "Nested repeat modules are not supported."
 
         if repeat_model_count > 1:
             if calc_mse:
@@ -736,8 +745,6 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                 qnet = HeavyRepeatModule(qnet, repeat_model_count, "qnet", True, abort_norm)
             else:
                 qnet = RepeatModuleStats(qnet, repeat_model_count, "qnet", True) 
-            ## final = false since we do the commit in the scheduler
-
 
         qnet.timestep_to_repetition = timestep_to_repetition
         qnet.last_repetition_count = repeat_model_count
@@ -759,18 +766,28 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             for name, param in self.named_parameters():
                 self.weight_dict_copy[name] = param.data.clone()
         
-    def restore_all_weights_from_cpu(self):
+    def restore_all_weights_from_cpu(self, do_quantize: bool = True):
         r"""
         Restores all the weights from the CPU.
         """
+
         with torch.no_grad():
             for name, param in self.named_parameters():
                 param.data = self.weight_dict_copy[name].clone()
 
-        self.quantize_all_weights(weight_quant = self.weight_quant, 
-                                  weight_flex_bias= self.weight_flex_bias, 
-                                  exclude=self.exclude,  
-                                  stochastic_emb_mode = self.stochastic_emb_mode)
+
+        if do_quantize:
+            if self.calc_mse:
+                self.quantize_all_weights(weight_quant = self.intermediate_weight_quantization, 
+                                           weight_flex_bias= self.weight_flex_bias, 
+                                           exclude=self.exclude, 
+                                           stochastic_emb_mode = 0)
+
+            self.quantize_all_weights(weight_quant = self.weight_quant, 
+                                    weight_flex_bias= self.weight_flex_bias, 
+                                    exclude=self.exclude,  
+                                    stochastic_emb_mode = self.stochastic_emb_mode)
+
 
     def quantize_all_weights(self, weight_quant: FloatingPoint, 
                              weight_flex_bias: bool, 

@@ -16,6 +16,7 @@ class Qop(torch.nn.Sequential):
 
     def forward(self, x, scale = 1.0):
         assert scale == 1.0, "Quantized forward pass does not support scaling"
+
         x = self.quant_op(x)
         x = self.op.forward(x)
         return x
@@ -173,6 +174,8 @@ class HeavyRepeatModule(torch.nn.Module):
 
 
         ## forward pass with fp32 activations
+        self.exec_op.restore_all_weights_from_cpu(do_quantize = False)
+
         out_fp32 = self.exec_op.forward(x, *args, **kwargs)
 
         ## enable all quantization and attention modules
@@ -187,35 +190,35 @@ class HeavyRepeatModule(torch.nn.Module):
         out = self.exec_op.forward(x, *args, **kwargs)
 
         if isinstance(out, tuple):
-            out_sum_squares = out[0] ** 2 
-            out_diff = ((out[0] - out_fp32[0])**2).mean()
+            out_sum_squares = out[0].float() ** 2 
+            out_diff = ((out[0].float() - out_fp32[0].float())**2).mean()
         elif isinstance(out, BaseOutput):
-            out_sum_squares = out.sample ** 2
-            out_diff = ((out.sample - out_fp32.sample)**2).mean()
+            out_sum_squares = out.sample.float() ** 2
+            out_diff = ((out.sample.float() - out_fp32.sample.float())**2).mean()
         else:
-            out_sum_squares = out ** 2
-            out_diff = ((out - out_fp32)**2).mean()
+            out_sum_squares = out.float() ** 2
+            out_diff = ((out.float() - out_fp32.float())**2).mean()
 
         for _ in range(1, self.num_iter):
             out_i = self.exec_op.forward(x, *args, **kwargs)
             if isinstance(out, tuple):
-                out_sum_squares += out_i[0] ** 2
-                out_diff += ((out_i[0] - out_fp32[0])**2).mean()
-                out = tuple([o + oi for o, oi in zip(out, out_i)])
+                out_sum_squares += out_i[0].float() ** 2
+                out_diff += ((out_i[0].float() - out_fp32[0].float())**2).mean()
+                out = tuple([o.float() + oi.float() for o, oi in zip(out, out_i)])
             elif isinstance(out, BaseOutput):
-                out.sample = out.sample + out_i.sample
-                out_sum_squares += out.sample ** 2
-                out_diff += ((out_i.sample - out_fp32.sample)**2).mean()
+                out.sample = out.sample.float() + out_i.sample.float()
+                out_sum_squares += out.sample.float() ** 2
+                out_diff += ((out_i.sample.float() - out_fp32.sample.float())**2).mean()
             else:
-                out += out_i
-                out_sum_squares += out_i ** 2
-                out_diff += ((out_i - out_fp32)**2).mean()
+                out += out_i.float()
+                out_sum_squares += out_i.float() ** 2
+                out_diff += ((out_i.float() - out_fp32.float())**2).mean()
 
         if isinstance(out, tuple):
             out = tuple([o / self.num_iter for o in out])
-            variance = ((out_sum_squares / self.num_iter) - out[0] ** 2)
+            variance = ((out_sum_squares / self.num_iter) - out[0] ** 2).float()
             standard_deviation = variance.sqrt()
-            variance_normalized = variance / (out[0] ** 2)
+            variance_normalized = variance / (out[0].float() ** 2)
         elif isinstance(out, BaseOutput):
             out.sample = out.sample / self.num_iter
             variance = ((out_sum_squares / self.num_iter) - out.sample ** 2)
@@ -234,17 +237,17 @@ class HeavyRepeatModule(torch.nn.Module):
         variance_normalized = variance_normalized.mean()
 
         if isinstance(out, tuple):
-            mse = ((out_fp32[0] - out[0]) ** 2).mean()
-            bias = (out_fp32[0] - out[0])
-            bias_out_corr = (bias*out_fp32[0]).mean() / ((out_fp32[0]**2).mean().sqrt() * (bias**2).mean().sqrt())
+            mse = ((out_fp32[0].float() - out[0]) ** 2).mean()
+            bias = (out_fp32[0].float() - out[0])
+            bias_out_corr = (bias*out_fp32[0]).mean() / ((out_fp32[0].float()**2).mean().sqrt() * (bias**2).mean().sqrt())
         elif isinstance(out, BaseOutput):
-            mse = ((out_fp32.sample - out.sample) ** 2).mean()
-            bias = (out_fp32.sample - out.sample)
-            bias_out_corr = (bias*out_fp32.sample).mean() / ((out_fp32.sample**2).mean().sqrt() * (bias**2).mean().sqrt())
+            mse = ((out_fp32.sample.float() - out.sample) ** 2).mean()
+            bias = (out_fp32.sample.float() - out.sample)
+            bias_out_corr = (bias*out_fp32.sample.float()).mean() / ((out_fp32.sample.float()**2).mean().sqrt() * (bias**2).mean().sqrt())
         else:
-            mse = ((out_fp32 - out) ** 2).mean()
-            bias = (out_fp32 - out)
-            bias_out_corr = (bias*out_fp32).mean() / ((out_fp32**2).mean().sqrt() * (bias**2).mean().sqrt())
+            mse = ((out_fp32.float() - out) ** 2).mean()
+            bias = (out_fp32.float() - out)
+            bias_out_corr = (bias*out_fp32.float()).mean() / ((out_fp32.float()**2).mean().sqrt() * (bias**2).mean().sqrt())
         
         if bias.dim() == 4:
             bias_results = {}
