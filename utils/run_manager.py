@@ -77,7 +77,7 @@ def list_experiments():
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
-                       Qfractions = False, partialQ = False, stochastic_weights = False, plus4 = False, plus = -1, extended = False):
+                       Qfractions = False, partialQ = False, stochastic_weights = False, plus4 = False, plus = -1, extended = False , x3 = False , x4 = False):
     
     if experiment_flags is not None:
 
@@ -97,7 +97,7 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         row_names = ["fp32", "M10E5", "M7E8"]
     elif experiment in ["M10E5", "M7E8"]:
         runs = [ f'{directory}/{prompt}x{n_steps}_M23E8' ,f'{directory}/{prompt}x{n_steps}_{experiment}']
-        row_names = ["fp32","vanilla"]
+        row_names = ["fp32","SR"]
     else:
         runs = []
         row_names = []
@@ -105,22 +105,24 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             runs.append(f'{directory}/{prompt}x{n_steps}_M23E8')
             row_names.append("fp32")
 
+
+        if embedding and nosr:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_nearest')
+            row_names.append(f"vanilla")
         if no_flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
-            row_names.append(f"vanilla no flex, no emb")
+            row_names.append(f"SR no flex, no emb")
         if flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex')
-            row_names.append(f"vanilla no emb")
+            row_names.append(f"SR no emb")
 
         if adjusted and flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
-            row_names.append(f"adjusted no emb")
+            row_names.append(f"SR adjusted no emb")
         if embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding')
-            row_names.append(f"vanilla")
-        if embedding and nosr:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_nearest')
-            row_names.append(f"nearest")
+            row_names.append(f"SR")
+
 
         if adjusted and embedding:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted')
@@ -211,6 +213,8 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             row_names.append(f"+2")
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M8E3_STEM0_flex_embedding')
             row_names.append(f"+4")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M12E3_STEM0_flex_embedding')
+            row_names.append(f"+8")
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_STEM0_flex_embedding')
             row_names.append(f"+19")
 
@@ -244,10 +248,12 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         if extended and plus > 0:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X2')
             row_names.append(f"+{plus}, x2")
-            # runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
-            # row_names.append(f"+{plus}, x3")
-            # runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
-            # row_names.append(f"+{plus}, x4")
+            if x3:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
+                row_names.append(f"+{plus}, x3")
+            if x4:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
+                row_names.append(f"+{plus}, x4")
 
 
     if check_for:
