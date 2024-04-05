@@ -91,25 +91,26 @@ def base_name(
         name = name + "A_" + fwd_quant + "_W_" + weight_quant
 
     if stochastic_weights_freq > 0:
-        name = name + "_stoWeights"
+        name = name + "_Wsr"
 
         if intermediate_weight_quantization != "M23E8":
-            name = name + "_with_" + intermediate_weight_quantization
-
-    if stochastic_emb_mode >= 4:
-        name = name + "_STEM" + str(stochastic_emb_mode % 4)
-    elif stochastic_emb_mode > 0:
-        name = name + "_stem" + str(stochastic_emb_mode % 4)
+            name = name + "_" + intermediate_weight_quantization
+        
+    if stochastic_emb_mode % 4 > 0:
+        if stochastic_emb_mode >= 4:
+            name = name + "_STEM" + str(stochastic_emb_mode % 4)
+        elif stochastic_emb_mode > 0:
+            name = name + "_stem" + str(stochastic_emb_mode % 4)
 
     if not quantized_run and repeat_module < 0:
         name = name + "_sim"
 
+    if not weight_flex_bias:
+        name += "_staticBias"
 
-
-    if weight_flex_bias:
-        name += "_flex"
-
-    if include != "" and include != "none" and include != "n":
+    if include == "" or include != "none" or include != "n":
+        name = name + "_noemb"
+    elif include != "embedding":
         name = name + "_" + include
 
     if scheduler_noise_mode != "dynamic":
@@ -145,11 +146,8 @@ def base_name(
         else:
             name += "_rounding_" + kwargs['activate_rounding']
 
-
     if dtype == torch.float32:
         name += "_fp32"
-
-    
 
     return name
 
