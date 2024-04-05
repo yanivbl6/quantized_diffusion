@@ -108,7 +108,7 @@ def base_name(
     if not weight_flex_bias:
         name += "_staticBias"
 
-    if include == "" or include != "none" or include != "n":
+    if include == "" or include == "none" or include == "n":
         name = name + "_noemb"
     elif include != "embedding":
         name = name + "_" + include
