@@ -63,31 +63,32 @@ def get_flags_for_experiment(experiment):
         return {"embedding": True, "stochastic_weights": True, "adjusted": True}
     elif experiment == "stem_emb":
         return {"embedding": True, "stem": True, "STEM": True,  "adjusted": True}
-    elif experiment == "plus4":
-        return {"embedding": True, "plus4": True}
+    elif experiment == "Wsr":
+        return {"embedding": True, "Wsr": True}
     else:
         raise ValueError(f"Unknown experiment: {experiment}, must be one of {list_experiments()}")
 
 def list_experiments():
     return ["adjusted_emb",  "emb","adjusted_flex", "all", "pre", "flex", "shift1", 
             "expexp", "variants", "ablation", "QN", "sr","nearest",
-            "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj",
-            "plus4"]
+            "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj", 
+            "Wsr"]
 
-def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "images", check_for = 0, experiment_flags = None,
+def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline = True, directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
-                       Qfractions = False, partialQ = False, stochastic_weights = False, plus4 = False, plus = -1, extended = False , x3 = False , x4 = False):
+                       Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1, extended = False , x3 = False , x4 = False, ceil = False):
     
     if experiment_flags is not None:
 
         if isinstance(experiment_flags, str):
             experiment_flags = get_flags_for_experiment(experiment_flags)
-            return get_runs_and_names(experiment, n_steps, prompt, directory, check_for, **experiment_flags)
+            return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus =plus, **experiment_flags)
         elif isinstance(experiment_flags, dict):
-            return get_runs_and_names(experiment, n_steps, prompt, directory, check_for, **experiment_flags)
+            return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus = plus, **experiment_flags)
 
     if experiment == "baseline":
+
         runs = [
         f'{directory}/{prompt}x{n_steps}_M23E8',
         f'{directory}/{prompt}x{n_steps}_M10E5_all',
@@ -102,26 +103,37 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
         runs = []
         row_names = []
         if baseline:
-            runs.append(f'{directory}/{prompt}x{n_steps}_M23E8')
-            row_names.append("fp32")
-
+            if fp32_baseline:
+                runs.append(f'{directory}/{prompt}x{n_steps}_fp32')
+                row_names.append("fp32")
+            else:
+                runs.append(f'{directory}/{prompt}x{n_steps}_fp16')
+                row_names.append("fp16")
 
         if embedding and nosr:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_nearest')
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest')
             row_names.append(f"vanilla")
+            if ceil:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest_ceil')
+                row_names.append(f"vanilla ceil")
         if no_flex:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_staticBias')
             row_names.append(f"SR no flex, no emb")
         if flex:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex')
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_noemb')
             row_names.append(f"SR no emb")
+
 
         if adjusted and flex:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
             row_names.append(f"SR adjusted no emb")
         if embedding:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding')
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
             row_names.append(f"SR")
+
+            if ceil:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_ceil')
+                row_names.append(f"SR ceil")
 
 
         if adjusted and embedding:
@@ -206,17 +218,40 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
             runs.append(f'{directory}/{prompt}x{n_steps}_A_{experiment}_W_M23E8_flex_embedding')
             row_names.append(f"Q_a")
 
-        if plus4:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M5E3_STEM0_flex_embedding')
-            row_names.append(f"+1")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M6E3_STEM0_flex_embedding')
-            row_names.append(f"+2")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M8E3_STEM0_flex_embedding')
-            row_names.append(f"+4")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M12E3_STEM0_flex_embedding')
-            row_names.append(f"+8")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_STEM0_flex_embedding')
+        if Wsr:
+            if plus == -1:
+                plus = 23
+
+            if plus >= 1:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M5E3')
+                row_names.append(f"+1")
+            # if plus >= 2:
+            #     runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M6E3')
+            #     row_names.append(f"+2")
+            if plus >= 4:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M8E3')
+                row_names.append(f"+4")
+            if plus >= 8:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M12E3')
+                row_names.append(f"+8")
+            
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
             row_names.append(f"+19")
+        elif plus >= 0:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M{4+plus}E3')
+            row_names.append(f"+{plus}")
+    
+
+        if extended and plus > 0:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M{4+plus}E3_X2')
+            row_names.append(f"+{plus}, double")
+            if x3:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
+                row_names.append(f"+{plus}, x3")
+            if x4:
+                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
+                row_names.append(f"+{plus}, x4")
+
 
         if stochastic_weights:
             # morgana2x100_M4E3_stoWeights_1_STEM3_flex_embedding
@@ -241,19 +276,6 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", directory = "i
                 runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding_adjusted')
                 row_names.append(f"adjusted stochastic weights (embs)")
 
-        if plus > 0:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding')
-            row_names.append(f"+{plus}")
-
-        if extended and plus > 0:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X2')
-            row_names.append(f"+{plus}, x2")
-            if x3:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
-                row_names.append(f"+{plus}, x3")
-            if x4:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
-                row_names.append(f"+{plus}, x4")
 
 
     if check_for:
@@ -297,7 +319,7 @@ def to_pd(results_dict, results_dict_steps,  col_names):
 
 
 def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "morgana2", images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
-                dry = False, quiet = False,
+                dry = False, quiet = False, fp32_baseline = True, plus = -1,
                 pvals = []):
     
     if not isinstance(prompts, list):
@@ -324,16 +346,14 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
             results_dict_steps[prompt_and_experiment] = []
             for n_steps in steps:
                 runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, prompt = prompt, 
+                                                     fp32_baseline = fp32_baseline, plus = plus,
                                                      experiment_flags= experiment_flags)
                 if check_directories(runs, images_per_run):
                     if not quiet:
                         print(f"Experiment: {experiment}, n_steps: {n_steps}")
                     if dry:
                         continue
-                    ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim+", stop = True)
-
-
-
+                    ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim", stop = True)
 
                     ssim = ssim[0,:]
                     std = std[0,:]
@@ -346,7 +366,7 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
                         results_dict_ssim_std[prompt_and_experiment][row_names[k]] += [std[k]]
 
                     for u,v in pvals:
-                        p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim+")
+                        p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim")
                         p_row_name = f"Pval({row_names[u]} > {row_names[v]})"
                         row_names.append(p_row_name)
                         if p_row_name not in results_dict_ssim[prompt_and_experiment]:

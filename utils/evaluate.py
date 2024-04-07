@@ -119,7 +119,7 @@ def get_fn_from_desc(fn_desc):
 
     elif fn_desc == "ssim":
         ##fn = lambda x,y: 1-compare_ssim(x.transpose((1, 2, 0)), y.transpose((1, 2, 0)))
-        fn = lambda x,y: 1-structural_similarity(x,y,channel_axis = 2)
+        fn = lambda x,y: structural_similarity(x,y,channel_axis = 2)
     elif fn_desc == "ssim+":
         fn = lambda x,y: structural_similarity(x,y,channel_axis = 2)
     return fn
@@ -160,6 +160,62 @@ def eval_mse_stats(runs, idxes, baseline = 0, fn_desc = None):
     std = mses.std(axis=0)
 
     return mean, std
+
+def put_in_memory(baseline, run, idx, fn_desc, value):
+
+
+    if baseline[-1] == "/":
+        baseline = baseline[:-1]
+    if run[-1] == "/":
+        run = run[:-1]
+
+    mem_dir = "objects"
+
+    if not os.path.exists(mem_dir):
+        os.makedirs(mem_dir)
+
+    baseline_name = baseline.split("/")[-1]
+    mem_path = f"{mem_dir}/{baseline_name}_{fn_desc}.obj"
+
+    if os.path.exists(mem_path):
+        with open(mem_path, "rb") as f:
+            memory = torch.load(f)
+    else:
+        memory = {}
+
+    key = f"{run.split('/')[-1]}_{idx}"
+
+    memory[key] = value
+    return
+
+def get_from_memory(baseline, run, idx, fn_desc):
+
+    if baseline[-1] == "/":
+        baseline = baseline[:-1]
+    if run[-1] == "/":
+        run = run[:-1]
+
+    mem_dir = "objects"
+
+    if not os.path.exists(mem_dir):
+        os.makedirs(mem_dir)
+
+    baseline_name = baseline.split("/")[-1]
+    mem_path = f"{mem_dir}/{baseline_name}_{fn_desc}.obj"
+
+    if os.path.exists(mem_path):
+        with open(mem_path, "rb") as f:
+            memory = torch.load(f)
+    else:
+        memory = {}
+
+    key = f"{run.split('/')[-1]}_{idx}"
+
+    if key in memory:
+        return memory[key]
+    else:
+        return None
+
 
 @memory.cache
 def eval_mse_matrix(runs, idxes, fn_desc = None, stop = False):

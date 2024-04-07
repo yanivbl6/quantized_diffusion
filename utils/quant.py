@@ -166,13 +166,13 @@ class Quantizer(nn.Module):
                     c = x.abs().max(dim=0, keepdim=True)[0]
                 else:
                     c = x.abs().max()
-                factor = 2**(torch.floor((-torch.log2(c))))
+                factor = 2**(torch.ceil((-torch.log2(c))))
             else:
                 m = self.forward_number.man
                 ##c = x.abs().max()/(2 - 2**(-m))
                 c = x.abs().max()
                 bhat = 2**(e-1) - log2(c) 
-                factor = 2**(floor(bhat))
+                factor = 2**(ceil(bhat))
 
             x = x*factor
         
