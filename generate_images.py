@@ -126,8 +126,12 @@ if __name__ == "__main__":
 
     if args.n_steps > 0:
         all_steps = [args.n_steps]
-    else:
+    elif args.n_steps == -1:
         all_steps = [50, 100, 200, 400, 800]
+    elif args.n_steps == -2:
+        all_steps = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
+    elif args.n_steps == -3:
+        all_steps = [20, 40, 60, 80, 120, 140, 160, 180, 200]
 
     for n_steps in all_steps:
         image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 

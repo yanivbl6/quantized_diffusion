@@ -708,6 +708,15 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         qnet.repeat_model_count = repeat_model_count
         qnet.repeat_module_count = repeat_module_count
         qnet.calc_mse = calc_mse
+        qnet.stochastic_weights_freq = stochastic_weights_freq  
+        qnet.intermediate_weight_quantization = intermediate_weight_quantization
+        qnet.weight_quant = weight_quant
+        qnet.stochastic_emb_mode = stochastic_emb_mode
+        qnet.weight_flex_bias = weight_flex_bias
+        qnet.exclude = exclude
+
+        qnet.current_weight_quant = 23
+
         qnet.repeat_modules_list = []
 
         if not individual_care:
@@ -718,22 +727,17 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         assert not nested, "Nested repeat modules are not supported."
 
 
+        if calc_mse:
+            qnet.store_all_weights_on_cpu(use_fp32 = True)
 
 
 
-        qnet.stochastic_weights_freq = stochastic_weights_freq  
-        if stochastic_weights_freq > 0 or calc_mse:
-            if intermediate_weight_quantization.man < 23 and not calc_mse:
+        if stochastic_weights_freq > 0:
+            if intermediate_weight_quantization.man < 23:
                 ## quantize the weights to the intermediate precision, using nearest rounding.
                 qnet.quantize_all_weights(weight_quant = intermediate_weight_quantization, weight_flex_bias= weight_flex_bias, exclude=exclude, stochastic_emb_mode = 0)
-
-            qnet.intermediate_weight_quantization = intermediate_weight_quantization
-
+                
             qnet.store_all_weights_on_cpu()
-            qnet.stochastic_emb_mode = stochastic_emb_mode
-            qnet.weight_quant = weight_quant
-            qnet.weight_flex_bias = weight_flex_bias
-            qnet.exclude = exclude
             qnet.steps_with_stochastic_weights = 0
             
 
@@ -751,42 +755,58 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
         qnet.set_abort_norm(False)
         
-
-
         return qnet
 
 
-    def store_all_weights_on_cpu(self):
+    def store_all_weights_on_cpu(self, use_fp32: bool = False):
         r"""
         Stores all the weights on the CPU.
         """
-        self.weight_dict_copy = {}
+        if use_fp32:
+            self.weight_dict_copy_fp32 = {}
+            target_quant = 23
+        else:
+            self.weight_dict_copy = {}
+            target_quant = self.intermediate_weight_quantization.man
+
 
         with torch.no_grad():
-            for name, param in self.named_parameters():
-                self.weight_dict_copy[name] = param.data.clone()
+            ## only saves if you know that you will need to sometimes climb a quantization level
+            if self.weight_quant.man < target_quant:
+                for name, param in self.named_parameters():
+                    if use_fp32:
+                        self.weight_dict_copy_fp32[name] = param.data.clone()
+                    else:
+                        self.weight_dict_copy[name] = param.data.clone()
         
-    def restore_all_weights_from_cpu(self, do_quantize: bool = True):
+
+    def restore_all_weights_from_cpu(self, do_quantize: bool = True, use_fp32: bool = False):
         r"""
         Restores all the weights from the CPU.
         """
 
-        with torch.no_grad():
-            for name, param in self.named_parameters():
-                param.data = self.weight_dict_copy[name].clone()
+        if not use_fp32 and self.intermediate_weight_quantization.man == 23:
+            use_fp32 = True
 
+        target_quant = 23 if use_fp32 else self.intermediate_weight_quantization.man
+
+        if self.cur_weight_quant != target_quant:
+            ## only loads if you were on a different quantization level
+            with torch.no_grad():
+                for name, param in self.named_parameters():
+                    if use_fp32:
+                        param.data = self.weight_dict_copy_fp32[name].clone()
+                    else:
+                        param.data = self.weight_dict_copy[name].clone()
+            self.cur_weight_quant = target_quant
 
         if do_quantize:
-            if self.calc_mse:
-                self.quantize_all_weights(weight_quant = self.intermediate_weight_quantization, 
-                                           weight_flex_bias= self.weight_flex_bias, 
-                                           exclude=self.exclude, 
-                                           stochastic_emb_mode = 0)
-
-            self.quantize_all_weights(weight_quant = self.weight_quant, 
-                                    weight_flex_bias= self.weight_flex_bias, 
-                                    exclude=self.exclude,  
-                                    stochastic_emb_mode = self.stochastic_emb_mode)
+            if self.weight_quant.man < self.cur_weight_quant:
+                ## only quantizes if you were on a higher quantization level
+                self.quantize_all_weights(weight_quant = self.weight_quant, 
+                                        weight_flex_bias= self.weight_flex_bias, 
+                                        exclude=self.exclude,  
+                                        stochastic_emb_mode = self.stochastic_emb_mode)
 
 
     def quantize_all_weights(self, weight_quant: FloatingPoint, 
@@ -832,6 +852,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                             param.data = quantize_op(param.data.cuda())
                         # print(f"Quantized {name}")
 
+        self.cur_weight_quant = weight_quant.man
 
     def quantize_all_gemm_operations(self, qargs: Dict[str, Any] = None, exclude: List[str] = []):
 
@@ -1578,7 +1599,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         if self.stochastic_weights_freq > 0:
             self.steps_with_stochastic_weights += 1
             if self.steps_with_stochastic_weights % self.stochastic_weights_freq == 0:
-                self.restore_all_weights_from_cpu()
+                self.restore_all_weights_from_cpu(do_quantize=True)
                 self.steps_with_stochastic_weights = 0
 
         if not return_dict:

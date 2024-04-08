@@ -65,6 +65,10 @@ def get_flags_for_experiment(experiment):
         return {"embedding": True, "stem": True, "STEM": True,  "adjusted": True}
     elif experiment == "Wsr":
         return {"embedding": True, "Wsr": True}
+    elif experiment == "traditional":
+        return {"traditional": True}
+    elif experiment == "extended":
+        return {"embedding": True, "nosr": True, "extended": True}
     else:
         raise ValueError(f"Unknown experiment: {experiment}, must be one of {list_experiments()}")
 
@@ -72,12 +76,13 @@ def list_experiments():
     return ["adjusted_emb",  "emb","adjusted_flex", "all", "pre", "flex", "shift1", 
             "expexp", "variants", "ablation", "QN", "sr","nearest",
             "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj", 
-            "Wsr"]
+            "Wsr", "traditional", "extended4"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline = True, directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
-                       Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1, extended = False , x3 = False , x4 = False, ceil = False):
+                       Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1, extended = False , 
+                       x3 = False , x4 = False, ceil = False, traditional = False):
     
     if experiment_flags is not None:
 
@@ -87,194 +92,188 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
         elif isinstance(experiment_flags, dict):
             return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus = plus, **experiment_flags)
 
-    if experiment == "baseline":
 
-        runs = [
-        f'{directory}/{prompt}x{n_steps}_M23E8',
-        f'{directory}/{prompt}x{n_steps}_M10E5_all',
-        f'{directory}/{prompt}x{n_steps}_M7E8_all',
-        ]
+    runs = []
+    row_names = []
+    if baseline:
+        if fp32_baseline:
+            runs.append(f'{directory}/{prompt}x{n_steps}_fp32')
+            row_names.append("fp32")
+        else:
+            runs.append(f'{directory}/{prompt}x{n_steps}_fp16')
+            row_names.append("fp16")
 
-        row_names = ["fp32", "M10E5", "M7E8"]
-    elif experiment in ["M10E5", "M7E8"]:
-        runs = [ f'{directory}/{prompt}x{n_steps}_M23E8' ,f'{directory}/{prompt}x{n_steps}_{experiment}']
-        row_names = ["fp32","SR"]
-    else:
-        runs = []
-        row_names = []
-        if baseline:
-            if fp32_baseline:
-                runs.append(f'{directory}/{prompt}x{n_steps}_fp32')
-                row_names.append("fp32")
-            else:
-                runs.append(f'{directory}/{prompt}x{n_steps}_fp16')
-                row_names.append("fp16")
+    if traditional:
+        runs.append(f'{directory}/{prompt}x{n_steps}_bfloat16')
+        row_names.append("bf16")
+        runs.append(f'{directory}/{prompt}x{n_steps}_qfp16')
+        row_names.append("fp16_quantized")
 
-        if embedding and nosr:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest')
-            row_names.append(f"vanilla")
-            if ceil:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest_ceil')
-                row_names.append(f"vanilla ceil")
-        if no_flex:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_staticBias')
-            row_names.append(f"SR no flex, no emb")
-        if flex:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_noemb')
-            row_names.append(f"SR no emb")
+    if embedding and nosr:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest')
+        row_names.append(f"vanilla")
+        if ceil:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest_ceil')
+            row_names.append(f"vanilla ceil")
+    if no_flex:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_staticBias')
+        row_names.append(f"SR no flex, no emb")
+    if flex:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_noemb')
+        row_names.append(f"SR no emb")
 
 
-        if adjusted and flex:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
-            row_names.append(f"SR adjusted no emb")
-        if embedding:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
-            row_names.append(f"SR")
+    if adjusted and flex:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
+        row_names.append(f"SR adjusted no emb")
+    if embedding:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
+        row_names.append(f"SR")
 
-            if ceil:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_ceil')
-                row_names.append(f"SR ceil")
-
-
-        if adjusted and embedding:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted')
-            row_names.append(f"adjusted")
-        if first:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_not_embedding')
-            row_names.append(f"quantized in/out")
-        if shift1:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_shift1')
-            row_names.append(f"shifted Q")
-        if expexp:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_expexp')
-            row_names.append(f"expexp interp")
-
-        if ablation:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_max_adjusted')
-            row_names.append(f"Q -> max(Q)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_average_adjusted')
-            row_names.append(f"Q-> mean(Q)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_min_adjusted')
-            row_names.append(f"Q-> min(Q)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_sqrt_adjusted')
-            row_names.append(f"Q-> sqrt(Q)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_square_adjusted')
-            row_names.append(f"Q-> Q**2")
-        if exact:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_exact')
-            row_names.append(f"Exact Q")
-        if nosr and adjusted and embedding:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_nearest')
-            row_names.append(f"adjusted nearest")
-
-        if stem:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem1_flex_embedding')
-            row_names.append(f"stochastic p_emb")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem2_flex_embedding')
-            row_names.append(f"stochastic t_emb")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem3_flex_embedding')
-            row_names.append(f"stochastic embs")
-            if adjusted:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem1_flex_embedding_adjusted')
-                row_names.append(f"stochastic p_emb (adjusted)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem2_flex_embedding_adjusted')
-                row_names.append(f"stochastic t_emb (adjusted)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem3_flex_embedding_adjusted')
-                row_names.append(f"stochastic embs (adjusted)")
-        if STEM:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM1_flex_embedding')
-            row_names.append(f"stochastic p_emb (+refiner)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM2_flex_embedding')
-            row_names.append(f"stochastic t_emb (+refiner)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding')
-            row_names.append(f"stochastic embs (+refiner)")
-            if adjusted:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM1_flex_embedding_adjusted')
-                row_names.append(f"stochastic p_emb (+refiner, adjusted)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM2_flex_embedding_adjusted')
-                row_names.append(f"stochastic t_emb (+refiner, adjusted)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding_adjusted')
-                row_names.append(f"stochastic embs (+refiner, adjusted)")
-        if Qfractions:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_half_adjusted')
-            row_names.append(f"Q -> Q/2")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_third_adjusted')
-            row_names.append(f"Q -> Q/3")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_quarter_adjusted')
-            row_names.append(f"Q -> Q/4")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_fifth_adjusted')
-            row_names.append(f"Q -> Q/5")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_eighth_adjusted')
-            row_names.append(f"Q -> Q/8")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_tenth_adjusted')
-            row_names.append(f"Q -> Q/10")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_thenth_adjusted')
-            row_names.append(f"Q -> Q/30")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_hundredth_adjusted')
-            row_names.append(f"Q -> Q/100")
-        if partialQ:
-            runs.append(f'{directory}/{prompt}x{n_steps}_A_M23E8_W_{experiment}_flex_embedding')
-            row_names.append(f"Q_w")
-            runs.append(f'{directory}/{prompt}x{n_steps}_A_{experiment}_W_M23E8_flex_embedding')
-            row_names.append(f"Q_a")
-
-        if Wsr:
-            if plus == -1:
-                plus = 23
-
-            if plus >= 1:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M5E3')
-                row_names.append(f"+1")
-            # if plus >= 2:
-            #     runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M6E3')
-            #     row_names.append(f"+2")
-            if plus >= 4:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M8E3')
-                row_names.append(f"+4")
-            if plus >= 8:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M12E3')
-                row_names.append(f"+8")
-            
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
-            row_names.append(f"+19")
-        elif plus >= 0:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M{4+plus}E3')
-            row_names.append(f"+{plus}")
-    
-
-        if extended and plus > 0:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M{4+plus}E3_X2')
-            row_names.append(f"+{plus}, double")
-            if x3:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
-                row_names.append(f"+{plus}, x3")
-            if x4:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
-                row_names.append(f"+{plus}, x4")
+        if ceil:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_ceil')
+            row_names.append(f"SR ceil")
 
 
-        if stochastic_weights:
-            # morgana2x100_M4E3_stoWeights_1_STEM3_flex_embedding
-            # morgana2x100_M4E3_stoWeights_1_STEM0_flex_embedding
-            # morgana2x100_M4E3_stoWeights_1_STEM1_flex_embedding
-            # morgana2x100_M4E3_stoWeights_1_STEM2_flex_embedding
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM0_flex_embedding')
-            row_names.append(f"stochastic weights (all)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM1_flex_embedding')
-            row_names.append(f"stochastic weights (p_emb)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM2_flex_embedding')
-            row_names.append(f"stochastic weights (t_emb)")
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding')
-            row_names.append(f"stochastic weights (embs)")
-            if adjusted:
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM0_flex_embedding_adjusted')
-                row_names.append(f"adjusted stochastic weights (all)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM1_flex_embedding_adjusted')
-                row_names.append(f"adjusted stochastic weights (p_emb)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM2_flex_embedding_adjusted')
-                row_names.append(f"adjusted stochastic weights (t_emb)")
-                runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding_adjusted')
-                row_names.append(f"adjusted stochastic weights (embs)")
+    if adjusted and embedding:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted')
+        row_names.append(f"adjusted")
+    if first:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_not_embedding')
+        row_names.append(f"quantized in/out")
+    if shift1:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_shift1')
+        row_names.append(f"shifted Q")
+    if expexp:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_expexp')
+        row_names.append(f"expexp interp")
+
+    if ablation:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_max_adjusted')
+        row_names.append(f"Q -> max(Q)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_average_adjusted')
+        row_names.append(f"Q-> mean(Q)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_min_adjusted')
+        row_names.append(f"Q-> min(Q)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_sqrt_adjusted')
+        row_names.append(f"Q-> sqrt(Q)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_square_adjusted')
+        row_names.append(f"Q-> Q**2")
+    if exact:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_QN_exact')
+        row_names.append(f"Exact Q")
+    if nosr and adjusted and embedding:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_adjusted_nearest')
+        row_names.append(f"adjusted nearest")
+
+    if stem:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem1_flex_embedding')
+        row_names.append(f"stochastic p_emb")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem2_flex_embedding')
+        row_names.append(f"stochastic t_emb")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem3_flex_embedding')
+        row_names.append(f"stochastic embs")
+        if adjusted:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem1_flex_embedding_adjusted')
+            row_names.append(f"stochastic p_emb (adjusted)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem2_flex_embedding_adjusted')
+            row_names.append(f"stochastic t_emb (adjusted)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stem3_flex_embedding_adjusted')
+            row_names.append(f"stochastic embs (adjusted)")
+    if STEM:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM1_flex_embedding')
+        row_names.append(f"stochastic p_emb (+refiner)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM2_flex_embedding')
+        row_names.append(f"stochastic t_emb (+refiner)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding')
+        row_names.append(f"stochastic embs (+refiner)")
+        if adjusted:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM1_flex_embedding_adjusted')
+            row_names.append(f"stochastic p_emb (+refiner, adjusted)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM2_flex_embedding_adjusted')
+            row_names.append(f"stochastic t_emb (+refiner, adjusted)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_STEM3_flex_embedding_adjusted')
+            row_names.append(f"stochastic embs (+refiner, adjusted)")
+    if Qfractions:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_half_adjusted')
+        row_names.append(f"Q -> Q/2")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_third_adjusted')
+        row_names.append(f"Q -> Q/3")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_quarter_adjusted')
+        row_names.append(f"Q -> Q/4")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_fifth_adjusted')
+        row_names.append(f"Q -> Q/5")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_eighth_adjusted')
+        row_names.append(f"Q -> Q/8")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_tenth_adjusted')
+        row_names.append(f"Q -> Q/10")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_thenth_adjusted')
+        row_names.append(f"Q -> Q/30")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_embedding_SQ_hundredth_adjusted')
+        row_names.append(f"Q -> Q/100")
+    if partialQ:
+        runs.append(f'{directory}/{prompt}x{n_steps}_A_M23E8_W_{experiment}_flex_embedding')
+        row_names.append(f"Q_w")
+        runs.append(f'{directory}/{prompt}x{n_steps}_A_{experiment}_W_M23E8_flex_embedding')
+        row_names.append(f"Q_a")
+
+    if Wsr:
+        if plus is None or plus == -1:
+            plus = 23
+
+        if plus >= 1:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M5E3')
+            row_names.append(f"+1")
+        # if plus >= 2:
+        #     runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M6E3')
+        #     row_names.append(f"+2")
+        if plus >= 4:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M8E3')
+            row_names.append(f"+4")
+        if plus >= 8:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M12E3')
+            row_names.append(f"+8")
+        
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
+        row_names.append(f"+19")
+    elif plus >= 0:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M{4+plus}E3')
+        row_names.append(f"+{plus}")
+
+
+    if extended and plus > 0:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M{4+plus}E3_X2')
+        row_names.append(f"+{plus}, double")
+        if x3:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X3')
+            row_names.append(f"+{plus}, x3")
+        if x4:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_with_M{4+plus}E3_STEM0_flex_embedding_X4')
+            row_names.append(f"+{plus}, x4")
+
+
+    if stochastic_weights:
+        # morgana2x100_M4E3_stoWeights_1_STEM3_flex_embedding
+        # morgana2x100_M4E3_stoWeights_1_STEM0_flex_embedding
+        # morgana2x100_M4E3_stoWeights_1_STEM1_flex_embedding
+        # morgana2x100_M4E3_stoWeights_1_STEM2_flex_embedding
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM0_flex_embedding')
+        row_names.append(f"stochastic weights (all)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM1_flex_embedding')
+        row_names.append(f"stochastic weights (p_emb)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM2_flex_embedding')
+        row_names.append(f"stochastic weights (t_emb)")
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding')
+        row_names.append(f"stochastic weights (embs)")
+        if adjusted:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM0_flex_embedding_adjusted')
+            row_names.append(f"adjusted stochastic weights (all)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM1_flex_embedding_adjusted')
+            row_names.append(f"adjusted stochastic weights (p_emb)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM2_flex_embedding_adjusted')
+            row_names.append(f"adjusted stochastic weights (t_emb)")
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_stoWeights_1_STEM3_flex_embedding_adjusted')
+            row_names.append(f"adjusted stochastic weights (embs)")
 
 
 
@@ -319,21 +318,28 @@ def to_pd(results_dict, results_dict_steps,  col_names):
 
 
 def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "morgana2", images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
-                dry = False, quiet = False, fp32_baseline = True, plus = -1,
+                dry = False, quiet = False, fp32_baseline = True, plus = -1, with_margin = False,
                 pvals = []):
     
+    
+
     if not isinstance(prompts, list):
         prompts = [prompts]
 
     if not isinstance(pvals, list):
         pvals = [pvals]
 
+    if not dry:
+        have_everything = get_results(experiments=experiments, steps=steps, prompts=prompts, images_per_run=images_per_run, directory=directory, experiment_flags=experiment_flags,
+                    dry=True, quiet=True, fp32_baseline=fp32_baseline, plus=plus, pvals=pvals)
+        assert have_everything, "Some directories are missing"
+
     results_dict_ssim = {}
     results_dict_ssim_std = {}
     results_dict_steps = {}
 
 
-
+    success = True
 
     for prompt in prompts:
         for experiment in experiments:
@@ -376,11 +382,22 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
                         results_dict_ssim_std[prompt_and_experiment][p_row_name] += [0]
 
                     results_dict_steps[prompt_and_experiment] += [n_steps]
+                else:
+                    success = False
+
+    if dry:
+        return success
+
     df = to_pd(results_dict_ssim, results_dict_steps, row_names)
 
     df_styled = highlight_max(df, len(pvals))
 
-    return df_styled
+    if with_margin:
+        df_std = to_pd(results_dict_ssim_std, results_dict_steps, row_names)
+        df_std_styled = highlight_max(df_std, len(pvals))
+        return df_styled, df_std_styled
+    else:
+        return df_styled
 
 
 

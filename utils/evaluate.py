@@ -23,7 +23,7 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img impo
 from diffusers import DiffusionPipeline
 from skimage.metrics import structural_similarity
 
-memory = Memory(location="/tmp/mem", verbose=0)
+memory = Memory(location="/tmp/mem2", verbose=0)
 ##memory = Memory(location=None, verbose=0)
 
 
