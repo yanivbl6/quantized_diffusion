@@ -95,9 +95,9 @@ if __name__ == "__main__":
             man = 23
             exp = 8
         else:
-            fwd_quant = parse_quant(args.fwd_quant)
-            man = fwd_quant.man + args.plus_bits_for_stochastic_weights
-            exp = fwd_quant.exp
+            weight_quant = parse_quant(args.weight_quant)
+            man = weight_quant.man + args.plus_bits_for_stochastic_weights
+            exp = weight_quant.exp
 
         args.intermediate_weight_quantization = f"M{man}E{exp}"
         args.stochastic_weights_freq = 1
