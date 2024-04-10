@@ -313,6 +313,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
                         shift_options: int = 0,
                         act_m: int = 4,
                         inter_m: int = 0,
+                        repeat_times: int = 1,
                         ):
         config = scheduler.config
         config["_class_name"] = "ModifiedEulerDiscreteScheduler"
@@ -330,7 +331,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         sched.act_m = act_m
         sched.inter_m = inter_m
-
+        sched.repeat_times = repeat_times
         return sched
 
     def get_repetitions(self):
@@ -534,19 +535,19 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         sigmas = torch.from_numpy(sigmas).to(dtype=torch.float32, device=device)
 
-
-
-
-
-
-
-
         # TODO: Support the full EDM scalings for all prediction types and timestep types
         if self.config.timestep_type == "continuous" and self.config.prediction_type == "v_prediction":
             self.timesteps = torch.Tensor([0.25 * sigma.log() for sigma in sigmas]).to(device=device)
         else:
             self.timesteps = torch.from_numpy(timesteps.astype(np.float32)).to(device=device)
 
+        if self.repeat_times > 1:
+            
+            size_sigmas = len(sigmas)
+            assert size_sigmas % self.repeat_times == 0, "size of sigmas should be divisible by repeat_times"
+            select_mask = np.arange(0, len(sigmas), self.repeat_times)
+            sigmas = sigmas[select_mask].reshape(1,-1).repeat(self.repeat_times,1).transpose(0,1).reshape(-1)
+            sigmas = sigmas[:size_sigmas]
 
         self.sigmas = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
 
@@ -766,7 +767,16 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         # 2. Convert to an ODE derivative
         derivative = (sample - pred_original_sample) / sigma_hat
 
-        dt = self.sigmas[self.step_index + 1] - sigma_hat
+        if self.repeat_times  == 1:
+            dt = self.sigmas[self.step_index + 1] - sigma_hat
+        else:
+            if self.step_index + self.repeat_times < len(self.sigmas):
+                eff_idx  = (self.step_index+  self.repeat_times)
+            else:
+                eff_idx = -1
+
+            dt = (self.sigmas[eff_idx] - sigma_hat) / self.repeat_times
+
 
         ##assert dt > 0, f"dt should be positive, but got {dt}"
 

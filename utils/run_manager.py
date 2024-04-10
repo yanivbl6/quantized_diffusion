@@ -229,18 +229,16 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
         if plus >= 1:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M5E3')
             row_names.append(f"+1")
-        # if plus >= 2:
-        #     runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M6E3')
-        #     row_names.append(f"+2")
+        if plus >= 2:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M6E3')
+            row_names.append(f"+2")
         if plus >= 4:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M8E3')
             row_names.append(f"+4")
-        if plus >= 8:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M12E3')
-            row_names.append(f"+8")
-        
-        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
-        row_names.append(f"+19")
+
+        if plus >= 6:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
+            row_names.append(f"+6")
 
 
 

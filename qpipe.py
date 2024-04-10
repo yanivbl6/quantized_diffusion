@@ -80,6 +80,7 @@ def base_name(
     intermediate_weight_quantization: str = "M23E8",
     dtype: torch.dtype = torch.float32,
     prolong: int = 1,
+    doubleT: int = 1,
     **kwargs,
 ) -> str:
     
@@ -130,6 +131,9 @@ def base_name(
 
     if prolong > 1:
         name += "_X" + str(prolong)
+
+    if doubleT > 1:
+        name += "_eX" + str(doubleT)
 
     if calc_mse:
         name += "_stats"
@@ -223,6 +227,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               stochastic_weights_freq = 0,
               intermediate_weight_quantization = "M23E8",
               prolong = 1,
+              doubleT = 1,
               **kwargs):
     
 
@@ -239,7 +244,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          quantized_run, repeat_module, repeat_model, layer_stats, 
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
-                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , prolong = prolong, **kwargs) 
+                         stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , prolong = prolong, 
+                         doubleT = doubleT, **kwargs) 
 
     print("-" * 80)
     print("Running: ", name)
@@ -308,7 +314,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                         quantization_noise_mode = scheduler_noise_mode,
                                                                         shift_options = shift_options,
                                                                         act_m = fwd_quant.man,
-                                                                        inter_m = intermediate_weight_quantization.man)
+                                                                        inter_m = intermediate_weight_quantization.man,
+                                                                        repeat_times= 1)
         
         base.scheduler.set_timesteps(n_steps)
 
@@ -333,7 +340,11 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if inspection:
         return base.unet
 
-    n_steps2 = n_steps * prolong
+    if doubleT > 1:
+        n_steps2 = n_steps * doubleT
+        use_adjusted_scheduler = True
+    else:
+        n_steps2 = n_steps * prolong
 
     if use_adjusted_scheduler:
         refiner.scheduler = QuantizedEulerDiscreteScheduler.from_scheduler(refiner.scheduler, 
@@ -343,7 +354,9 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                             quantization_noise_mode = scheduler_noise_mode,
                                                                             shift_options = shift_options,
                                                                             act_m = fwd_quant.man,
-                                                                            inter_m = intermediate_weight_quantization.man)
+                                                                            inter_m = intermediate_weight_quantization.man,
+                                                                            repeat_times= doubleT)
+
         refiner.scheduler.set_timesteps(n_steps2)
 
     

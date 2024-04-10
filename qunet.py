@@ -688,18 +688,8 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         if not quantize_last:
             exclude = exclude + ["conv_out", "conv_norm"]
 
-
-
         qnet.to(device=unet.device)
-
-
-
-        
         qnet.quantize_all_gemm_operations(qargs=qargs, exclude=exclude)
-
-
-        
-
         qnet.dynamic_repeats = repeat_module_count < 0 
 
         if qnet.dynamic_repeats:
@@ -785,20 +775,23 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         Restores all the weights from the CPU.
         """
 
-        if not use_fp32 and self.intermediate_weight_quantization.man == 23:
+        if self.intermediate_weight_quantization.man == 23:
             use_fp32 = True
 
         target_quant = 23 if use_fp32 else self.intermediate_weight_quantization.man
 
+
+
         if self.cur_weight_quant != target_quant:
-            ## only loads if you were on a different quantization level
-            with torch.no_grad():
-                for name, param in self.named_parameters():
-                    if use_fp32:
-                        param.data = self.weight_dict_copy_fp32[name].clone()
-                    else:
-                        param.data = self.weight_dict_copy[name].clone()
-            self.cur_weight_quant = target_quant
+            if not (do_quantize and self.weight_quant.man == target_quant):
+                ## only loads if you were on a different quantization level
+                with torch.no_grad():
+                    for name, param in self.named_parameters():
+                        if use_fp32:
+                            param.data = self.weight_dict_copy_fp32[name].clone()
+                        else:
+                            param.data = self.weight_dict_copy[name].clone()
+                self.cur_weight_quant = target_quant
 
         if do_quantize:
             if self.weight_quant.man < self.cur_weight_quant:
