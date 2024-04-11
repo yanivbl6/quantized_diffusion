@@ -113,7 +113,7 @@ if __name__ == "__main__":
     if args.STEM > 0:
         args.stem = args.STEM + 4
 
-    if args.doubleT != 0 and args.quantization_noise == "none":
+    if args.doubleT != 1 and args.quantization_noise == "none":
         args.quantization_noise = "zero"
 
 
