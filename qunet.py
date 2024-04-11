@@ -655,6 +655,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   stochastic_emb_mode: int = 0,
                   stochastic_weights_freq: int = 0,
                   intermediate_weight_quantization: FloatingPoint = None,
+                  adjustBN_scalar: float = 0.0, 
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -689,7 +690,11 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             exclude = exclude + ["conv_out", "conv_norm"]
 
         qnet.to(device=unet.device)
+
+
         qnet.quantize_all_gemm_operations(qargs=qargs, exclude=exclude)
+
+        qnet.adjust_all_norm_scalars(adjustBN_scalar)
         qnet.dynamic_repeats = repeat_module_count < 0 
 
         if qnet.dynamic_repeats:
@@ -800,6 +805,23 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                                         weight_flex_bias= self.weight_flex_bias, 
                                         exclude=self.exclude,  
                                         stochastic_emb_mode = self.stochastic_emb_mode)
+
+
+    def adjust_all_norm_scalars(self, adjustBN_scalar: float):
+
+
+        if adjustBN_scalar == 0.0:
+            return
+        
+        quantization_effect = 1.0 + adjustBN_scalar
+        correction = 1.0 / quantization_effect
+
+        with torch.no_grad():
+            for name, param in self.named_parameters():
+                if "norm" in name and "weight" in name:
+                    param.data = param.data * correction
+                
+
 
 
     def quantize_all_weights(self, weight_quant: FloatingPoint, 

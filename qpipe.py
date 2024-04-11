@@ -81,6 +81,7 @@ def base_name(
     dtype: torch.dtype = torch.float32,
     prolong: int = 1,
     doubleT: int = 1,
+    adjustBN: float = 0.0,
     **kwargs,
 ) -> str:
     
@@ -129,11 +130,16 @@ def base_name(
         if quantization_noise != "linexp":
             name += "_QN_" + str(quantization_noise)
 
+    if adjustBN != 0.0:
+        name += "_BN=%.1E" % adjustBN 
+
     if prolong > 1:
         name += "_X" + str(prolong)
 
     if doubleT > 1:
         name += "_eX" + str(doubleT)
+    elif doubleT < 0:
+        name += "_EX" + str(-doubleT)
 
     if calc_mse:
         name += "_stats"
@@ -228,6 +234,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               intermediate_weight_quantization = "M23E8",
               prolong = 1,
               doubleT = 1,
+              adjustBN = 0.0,
               **kwargs):
     
 
@@ -245,7 +252,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
                          stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , prolong = prolong, 
-                         doubleT = doubleT, **kwargs) 
+                         doubleT = doubleT, adjustBN= adjustBN, **kwargs) 
 
     print("-" * 80)
     print("Running: ", name)
@@ -332,7 +339,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                 quantize_embedding, quantize_first, quantize_last, abort_norm,
                                                 stochastic_emb_mode = stochastic_emb_mode % 4,
                                                 stochastic_weights_freq = stochastic_weights_freq,
-                                                intermediate_weight_quantization = intermediate_weight_quantization)
+                                                intermediate_weight_quantization = intermediate_weight_quantization,
+                                                adjustBN_scalar = adjustBN)
 
     if stochastic_emb_mode > 4:
         stochastic_emb_mode = 0
@@ -340,9 +348,12 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if inspection:
         return base.unet
 
-    if doubleT > 1:
+    if doubleT > 0:
         n_steps2 = n_steps * doubleT
         use_adjusted_scheduler = True
+    elif doubleT < 0:
+        n_steps2 = n_steps * (-doubleT)
+        use_adjusted_scheduler = False
     else:
         n_steps2 = n_steps * prolong
 
@@ -368,7 +379,8 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                    quantize_embedding, quantize_first, quantize_last, abort_norm,
                                                     stochastic_emb_mode = stochastic_emb_mode % 4,
                                                     stochastic_weights_freq = stochastic_weights_freq,
-                                                    intermediate_weight_quantization = intermediate_weight_quantization)
+                                                    intermediate_weight_quantization = intermediate_weight_quantization,
+                                                    adjustBN_scalar = adjustBN)
 
     idx = 0
 

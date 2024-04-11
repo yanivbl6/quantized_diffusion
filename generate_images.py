@@ -69,6 +69,9 @@ parser.add_argument('--fp32', action='store_true')
 parser.add_argument('-x','--prolong', type=int, default=1)
 parser.add_argument('-X','--doubleT', type=int, default=1)
 
+
+parser.add_argument('--bn', type=float, default=0.0)
+
 ##main
 
 def parse_resolution(resolution):
@@ -110,7 +113,7 @@ if __name__ == "__main__":
     if args.STEM > 0:
         args.stem = args.STEM + 4
 
-    if args.doubleT > 1 and args.quantization_noise == "none":
+    if args.doubleT != 0 and args.quantization_noise == "none":
         args.quantization_noise = "zero"
 
 
@@ -153,7 +156,7 @@ if __name__ == "__main__":
                         stochastic_weights_freq = args.stochastic_weights_freq, 
                         intermediate_weight_quantization = args.intermediate_weight_quantization,
                         dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
-                        doubleT = args.doubleT,
+                        doubleT = args.doubleT, adjustBN = args.bn,
                         **kwargs)
         
         torch.cuda.empty_cache()

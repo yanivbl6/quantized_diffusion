@@ -548,6 +548,13 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
             select_mask = np.arange(0, len(sigmas), self.repeat_times)
             sigmas = sigmas[select_mask].reshape(1,-1).repeat(self.repeat_times,1).transpose(0,1).reshape(-1)
             sigmas = sigmas[:size_sigmas]
+        if self.repeat_times < 0:
+            self.sigmas2 = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
+            size_sigmas = len(sigmas)
+            select_mask = np.arange(0, len(sigmas), -self.repeat_times)
+            sigmas = sigmas[select_mask].reshape(1,-1).repeat(-self.repeat_times,1).transpose(0,1).reshape(-1)
+            sigmas = sigmas[:size_sigmas]
+            
 
         self.sigmas = torch.cat([sigmas, torch.zeros(1, device=sigmas.device)])
 
@@ -707,7 +714,11 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         # Upcast to avoid precision issues when computing prev_sample
         sample = sample.to(torch.float32)
 
-        sigma = self.sigmas[self.step_index]
+
+        if self.repeat_times < 0:
+            sigma = self.sigmas2[self.step_index]
+        else:
+            sigma = self.sigmas[self.step_index]
 
         # gamma = min(s_churn / (len(self.sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigma <= s_tmax else 0.0
         gamma = self.gammas[self.step_index]
@@ -767,7 +778,7 @@ class QuantizedEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         # 2. Convert to an ODE derivative
         derivative = (sample - pred_original_sample) / sigma_hat
 
-        if self.repeat_times  == 1:
+        if self.repeat_times  <= 1:
             dt = self.sigmas[self.step_index + 1] - sigma_hat
         else:
             if self.step_index + self.repeat_times < len(self.sigmas):

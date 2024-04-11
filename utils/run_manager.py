@@ -69,8 +69,12 @@ def get_flags_for_experiment(experiment):
         return {"traditional": True}
     elif experiment == "extended":
         return {"embedding": True, "nosr": True, "extended": True}
+    elif experiment == "repeated":
+        return {"embedding": True, "nosr": True, "extended": True, "repeated": True}
     elif experiment == "extended4":
         return {"embedding": True, "nosr": True, "extended": True, "x4": True}
+    elif experiment == "repeated4":
+        return {"embedding": True, "nosr": True, "extended": True, "repeated": True, "x4": True}
     else:
         raise ValueError(f"Unknown experiment: {experiment}, must be one of {list_experiments()}")
 
@@ -78,13 +82,13 @@ def list_experiments():
     return ["adjusted_emb",  "emb","adjusted_flex", "all", "pre", "flex", "shift1", 
             "expexp", "variants", "ablation", "QN", "sr","nearest",
             "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj", 
-            "Wsr", "traditional", "extended"]
+            "Wsr", "traditional", "extended", "repeated","repeated4"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline = True, directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
                        Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1, extended = False , 
-                       x3 = False , x4 = False, ceil = False, traditional = False):
+                       x3 = False , x4 = False, ceil = False, traditional = False, repeated = False):
     
     if experiment_flags is not None:
 
@@ -242,12 +246,12 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
 
 
 
-    if extended:
-
+    if extended or repeated:
         run, name = plus_run(directory, prompt, n_steps, experiment, plus)
         runs.append(run)
         row_names.append(name)
 
+    if extended:
         run, name = plus_run(directory, prompt, n_steps, experiment, plus, "_X2")
         runs.append(run)
         row_names.append(name + ", double")
@@ -261,6 +265,20 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
             runs.append(run)
             row_names.append(name + ", quadruple")
 
+    if repeated:
+        run, name = plus_run(directory, prompt, n_steps, experiment, plus, "_adjusted_QN_zero_eX2")
+        runs.append(run)
+        row_names.append(name + ", double+")
+
+        if x3:
+            run, name = plus_run(directory, prompt, n_steps, experiment, plus, "_adjusted_QN_zero_eX3")
+            runs.append(run)
+            row_names.append(name +  ", triple+")
+
+        if x4:
+            run, name = plus_run(directory, prompt, n_steps, experiment, plus, "_X4")
+            runs.append(run)
+            row_names.append(name + ", quadruple+")
 
     if stochastic_weights:
         # morgana2x100_M4E3_stoWeights_1_STEM3_flex_embedding
