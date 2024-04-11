@@ -348,7 +348,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     if inspection:
         return base.unet
 
-    if doubleT > 0:
+    if doubleT > 1:
         n_steps2 = n_steps * doubleT
         use_adjusted_scheduler = True
     elif doubleT < 0:
