@@ -65,6 +65,8 @@ def get_flags_for_experiment(experiment):
         return {"embedding": True, "stem": True, "STEM": True,  "adjusted": True}
     elif experiment == "Wsr":
         return {"embedding": True, "Wsr": True}
+    elif experiment == "Wsr4":
+        return {"embedding": True, "Wsr4": True}
     elif experiment == "traditional":
         return {"traditional": True}
     elif experiment == "extended":
@@ -82,13 +84,13 @@ def list_experiments():
     return ["adjusted_emb",  "emb","adjusted_flex", "all", "pre", "flex", "shift1", 
             "expexp", "variants", "ablation", "QN", "sr","nearest",
             "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj", 
-            "Wsr", "traditional", "extended", "repeated","repeated4"]
+            "Wsr", "traditional", "extended", "repeated","repeated4", "Wsr4"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline = True, directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
                        Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1,  customs = [], extended = False , 
-                       x3 = False , x4 = False, ceil = False, traditional = False, repeated = False):
+                       x3 = False , x4 = False, ceil = False, traditional = False, repeated = False, Wsr4 = False):
     
     if experiment_flags is not None:
 
@@ -244,7 +246,9 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
             row_names.append(f"+6")
 
-
+    if Wsr4:
+        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M8E3')
+        row_names.append(f"+4")
 
     if extended or repeated:
         run, name = plus_run(directory, prompt, n_steps, experiment, plus)

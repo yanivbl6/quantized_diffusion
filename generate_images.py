@@ -78,6 +78,8 @@ parser.add_argument('--bn', type=float, default=0.0)
 parser.add_argument('--qstep', type=int, default=-1)
 
 
+parser.add_argument('--caption_start', type=int, default=-1)
+
 ##main
 
 def parse_resolution(resolution):
@@ -162,7 +164,7 @@ if __name__ == "__main__":
                         stochastic_weights_freq = args.stochastic_weights_freq, 
                         intermediate_weight_quantization = args.intermediate_weight_quantization,
                         dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
-                        doubleT = args.doubleT, adjustBN = args.bn, qstep = args.qstep,
+                        doubleT = args.doubleT, adjustBN = args.bn, qstep = args.qstep, caption_start = args.caption_start,
                         **kwargs)
         
         torch.cuda.empty_cache()

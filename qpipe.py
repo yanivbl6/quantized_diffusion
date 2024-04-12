@@ -83,6 +83,8 @@ def base_name(
     doubleT: int = 1,
     adjustBN: float = 0.0,
     qstep: int = -1,
+    caption_start: int = -1,
+    samples: int = 1,
     **kwargs,
 ) -> str:
     
@@ -163,6 +165,9 @@ def base_name(
     if dtype == torch.float32:
         name += "_fp32"
 
+    if caption_start >= 0:
+        name += "_from_" + str(caption_start) + "_to_" + str(caption_start + samples)
+
     return name
 
 
@@ -240,15 +245,24 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               doubleT = 1,
               adjustBN = 0.0,
               qstep = -1,
+              caption_start = -1,
               **kwargs):
     
 
+
     quantize_embedding, quantize_first, quantize_last = parse_include(include)
 
-    pprompt, nprompt = get_prompt(prompt)
 
 
-
+    if prompt != "coco":
+        pprompt, nprompt = get_prompt(prompt)
+        coco_mode = False
+    else:
+        from T2IBenchmark.datasets import get_coco_30k_captions
+        captions = list(get_coco_30k_captions().values())
+        img_idx = list(get_coco_30k_captions().keys())
+        coco_mode = True
+        
     quantization_noise_str = quantization_noise
 
     if isinstance(fwd_quant, str) and isinstance(weight_quant, str):
@@ -257,7 +271,10 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
                          stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , prolong = prolong, 
-                         doubleT = doubleT, adjustBN= adjustBN, qstep = qstep, **kwargs) 
+                         doubleT = doubleT, adjustBN= adjustBN, qstep = qstep, caption_start =caption_start , samples= samples, **kwargs) 
+
+    if caption_start < 0:
+        caption_start = 0
 
     print("-" * 80)
     print("Running: ", name)
@@ -406,15 +423,19 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     base.set_progress_bar_config(disable = True)
     refiner.set_progress_bar_config(disable = True)
 
-    pbar = tqdm(range(samples), desc="Generating images", total = samples)
+    pbar = tqdm(range(caption_start,caption_start + samples), desc="Generating images", total = samples)
     for idx in pbar:
 
-        fname = os.path.join(subfolder,  "img_%05d.png" % idx)
+        if coco_mode:
+            fname = os.path.join(subfolder, "%d.jpeg" % img_idx[idx])
+        else:
+            fname = os.path.join(subfolder,  "img_%05d.png" % idx)
 
         if os.path.exists(fname) and not overwrite:
             ## load image from file
-            image = Image.open(fname)
-            mimages.append(image)
+            if clip_score and samples > 4:
+                image = Image.open(fname)
+                mimages.append(image)
             continue
 
 
@@ -445,7 +466,12 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
             wandb_entry = nullcontext()
 
         with wandb_entry:
-            generator.manual_seed(idx)
+            if coco_mode:
+                pprompt = captions[idx]
+                generator.manual_seed(42)
+            else:
+                generator.manual_seed(idx)
+
             base.unet.step_counter = 0
 
             image = base(
@@ -473,8 +499,12 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
         ## save the image
             
+        
         with GuardMemOp() as g:
-            image.save(fname)
+            if coco_mode:
+                image.save(fname, format = "jpeg")
+            else:
+                image.save(fname)
 
         if clip_score and samples > 4:
             mimages.append(image)
