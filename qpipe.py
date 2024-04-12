@@ -261,6 +261,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
         from T2IBenchmark.datasets import get_coco_30k_captions
         captions = list(get_coco_30k_captions().values())
         img_idx = list(get_coco_30k_captions().keys())
+        nprompt = None
         coco_mode = True
         
     quantization_noise_str = quantization_noise
