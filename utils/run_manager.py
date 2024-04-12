@@ -87,16 +87,16 @@ def list_experiments():
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline = True, directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
-                       Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1, extended = False , 
+                       Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1,  customs = [], extended = False , 
                        x3 = False , x4 = False, ceil = False, traditional = False, repeated = False):
     
     if experiment_flags is not None:
 
         if isinstance(experiment_flags, str):
             experiment_flags = get_flags_for_experiment(experiment_flags)
-            return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus =plus, **experiment_flags)
+            return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus =plus,  customs = customs, **experiment_flags)
         elif isinstance(experiment_flags, dict):
-            return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus = plus, **experiment_flags)
+            return get_runs_and_names(experiment, n_steps, prompt, fp32_baseline, directory, check_for, plus = plus,  customs = customs, **experiment_flags)
 
 
     runs = []
@@ -304,6 +304,17 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
             row_names.append(f"adjusted stochastic weights (embs)")
 
 
+    for i,custom in enumerate(customs):
+        if isinstance(custom, tuple):
+            colname = custom[1]
+            custom = custom[0]
+        else:
+            colname = f"custom{i}"
+        fname = custom % (prompt, n_steps, experiment)
+        name =f"{directory}/{fname}"
+        runs.append(name)        
+        row_names.append(colname)
+
 
     if check_for:
         check_directories(runs, check_for)
@@ -347,7 +358,7 @@ def to_pd(results_dict, results_dict_steps,  col_names):
 
 def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "morgana2", images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
                 dry = False, quiet = False, fp32_baseline = True, plus = -1, with_margin = False,
-                pvals = []):
+                pvals = [], customs = []):
     
     
 
@@ -359,7 +370,7 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
 
     if not dry:
         have_everything = get_results(experiments=experiments, steps=steps, prompts=prompts, images_per_run=images_per_run, directory=directory, experiment_flags=experiment_flags,
-                    dry=True, quiet=True, fp32_baseline=fp32_baseline, plus=plus, pvals=pvals)
+                    dry=True, quiet=True, fp32_baseline=fp32_baseline, plus=plus, pvals=pvals, customs = customs)
         assert have_everything, "Some directories are missing"
 
     results_dict_ssim = {}
@@ -380,7 +391,7 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
             results_dict_steps[prompt_and_experiment] = []
             for n_steps in steps:
                 runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, prompt = prompt, 
-                                                     fp32_baseline = fp32_baseline, plus = plus,
+                                                     fp32_baseline = fp32_baseline, plus = plus, customs = customs,
                                                      experiment_flags= experiment_flags)
                 if check_directories(runs, images_per_run):
                     if not quiet:

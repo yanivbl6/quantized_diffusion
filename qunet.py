@@ -656,6 +656,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
                   stochastic_weights_freq: int = 0,
                   intermediate_weight_quantization: FloatingPoint = None,
                   adjustBN_scalar: float = 0.0, 
+                  qstep: int = -1,
                   ):
         r"""
         Initializes the model from a pretrained UNet2DConditionModel.
@@ -709,7 +710,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         qnet.stochastic_emb_mode = stochastic_emb_mode
         qnet.weight_flex_bias = weight_flex_bias
         qnet.exclude = exclude
-
+        qnet.qstep = qstep
         qnet.current_weight_quant = 23
 
         qnet.repeat_modules_list = []
@@ -722,7 +723,7 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
         assert not nested, "Nested repeat modules are not supported."
 
 
-        if calc_mse:
+        if calc_mse or qstep >= 0:
             qnet.store_all_weights_on_cpu(use_fp32 = True)
 
 
@@ -750,6 +751,18 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
 
         qnet.set_abort_norm(False)
         
+
+        if qstep > 0:
+            for name, op in qnet.named_modules():
+                if isinstance(op, Qop):
+                    op.quant_op.disable()
+                if isinstance(op, Attention):
+                    op.enabled = False
+
+            qnet.restore_all_weights_from_cpu(do_quantize = False, use_fp32 = True)
+
+        qnet.step_counter = 0 
+
         return qnet
 
 
@@ -1611,11 +1624,34 @@ class QUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
             # remove `lora_scale` from each PEFT layer
             unscale_lora_layers(self, lora_scale)
 
-        if self.stochastic_weights_freq > 0:
-            self.steps_with_stochastic_weights += 1
-            if self.steps_with_stochastic_weights % self.stochastic_weights_freq == 0:
-                self.restore_all_weights_from_cpu(do_quantize=True)
-                self.steps_with_stochastic_weights = 0
+
+        if self.qstep >= 0:
+            self.step_counter += 1
+            if self.qstep == self.step_counter:
+                for name, op in self.named_modules():
+                    if isinstance(op, Qop):
+                        op.quant_op.enable()
+                    if isinstance(op, Attention):
+                        op.enabled = True
+
+                self.restore_all_weights_from_cpu(do_quantize = True, use_fp32 = False)
+
+            elif self.step_counter == self.qstep +1:
+                for name, op in self.named_modules():
+                    if isinstance(op, Qop):
+                        op.quant_op.disable()
+                    if isinstance(op, Attention):
+                        op.enabled = False
+
+                self.restore_all_weights_from_cpu(do_quantize = False, use_fp32 = True)
+        else:
+            if self.stochastic_weights_freq > 0 :
+                self.steps_with_stochastic_weights += 1
+                if self.steps_with_stochastic_weights % self.stochastic_weights_freq == 0:
+                    self.restore_all_weights_from_cpu(do_quantize=True)
+                    self.steps_with_stochastic_weights = 0
+
+
 
         if not return_dict:
             return (sample,)

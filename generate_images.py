@@ -1,6 +1,9 @@
 from diffusers import DiffusionPipeline
 import torch
 import matplotlib.pyplot as plt
+
+import os
+
 from qunet import QUNet2DConditionModel
 from diffusers.models import UNet2DConditionModel
 from QPyTorch.qtorch import BlockFloatingPoint, FixedPoint, FloatingPoint
@@ -71,6 +74,9 @@ parser.add_argument('-X','--doubleT', type=int, default=1)
 
 
 parser.add_argument('--bn', type=float, default=0.0)
+
+parser.add_argument('--qstep', type=int, default=-1)
+
 
 ##main
 
@@ -156,7 +162,7 @@ if __name__ == "__main__":
                         stochastic_weights_freq = args.stochastic_weights_freq, 
                         intermediate_weight_quantization = args.intermediate_weight_quantization,
                         dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
-                        doubleT = args.doubleT, adjustBN = args.bn,
+                        doubleT = args.doubleT, adjustBN = args.bn, qstep = args.qstep,
                         **kwargs)
         
         torch.cuda.empty_cache()

@@ -1,3 +1,8 @@
+from T2IBenchmark import calculate_coco_fid
+from T2IBenchmark.models.kandinsky21 import Kandinsky21Wrapper
+
+import os
+
 from diffusers import DiffusionPipeline, logging
 import torch
 from tqdm import tqdm
@@ -23,6 +28,73 @@ from utils.prompts import get_prompt
 from utils.safe_mem import GuardMemOp
 
 from PIL import Image
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Run parameters with their default values.')
+
+parser.add_argument('-n','--n_steps', type=int, default=40)
+parser.add_argument('--high_noise_frac', type=float, default=0.8)
+parser.add_argument('--prompt', type=str, default="morgana2")
+parser.add_argument('-W','--weight_quant', type=str, default=None)
+parser.add_argument('-A','--fwd_quant', type=str, default="M23E8")
+parser.add_argument('-f','--flex_bias', action='store_true')
+parser.add_argument('-N', '--samples', type=int, default=64)
+parser.add_argument('-r', '--repeat_module', type=int, default=1)
+parser.add_argument('-R', '--repeat_model', type=int, default=1)
+parser.add_argument('--layer_stats', action='store_true')
+parser.add_argument('-I', '--individual_care', action='store_true')
+parser.add_argument('-i','--inspection', action='store_true')
+parser.add_argument('-g','--gamma_threshold', type=float, default=1)
+parser.add_argument('--sim', action='store_true')
+parser.add_argument('-Q','--quantization_noise', type=str, default="none")
+
+parser.add_argument('--mse', action='store_true')
+parser.add_argument('--abort_norm', action='store_true')
+
+
+
+parser.add_argument('--overwrite', action='store_true')
+
+parser.add_argument('--eval', action='store_true')
+
+
+parser.add_argument('--name', type=str, default="")
+parser.add_argument('--device', type=int, default=0)
+parser.add_argument('--resolution', type=str, default="1024:1024")
+parser.add_argument('--include', type=str, default="embedding")
+parser.add_argument('-S','--scheduler_noise_mode', type=str, default="dynamic")
+
+parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--shift_options', type=int, default=0)
+
+parser.add_argument('--noSR', action='store_true')
+
+parser.add_argument('--deterministic', action='store_true')
+
+
+parser.add_argument('--img_directory', type=str, default="images")
+
+parser.add_argument('--stem', type=int, default=0)
+parser.add_argument('--STEM', type=int, default=0)
+parser.add_argument('--stochastic_weights_freq', type=int, default=0)
+
+parser.add_argument('--intermediate_weight_quantization', type=str, default="M23E8")
+
+parser.add_argument('-p','--plus_bits_for_stochastic_weights', type=int, default=0)
+
+parser.add_argument('--fp32', action='store_true')
+
+
+parser.add_argument('-x','--prolong', type=int, default=1)
+parser.add_argument('-X','--doubleT', type=int, default=1)
+
+
+parser.add_argument('--bn', type=float, default=0.0)
+
+parser.add_argument('--qstep', type=int, default=-1)
+
+parser.add_argument('--dir_name', type=str, default="misc")
 
 
 
@@ -202,8 +274,7 @@ def parse_include(option: str):
 
 
 
-
-def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
+def get_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               name_or_path_ref = "stabilityai/stable-diffusion-xl-refiner-1.0",
               n_steps = 40,
               high_noise_frac = 0.8,
@@ -386,183 +457,146 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                     stochastic_weights_freq = stochastic_weights_freq,
                                                     intermediate_weight_quantization = intermediate_weight_quantization,
                                                     adjustBN_scalar = adjustBN, qstep = qstep)
-
-    idx = 0
-
-
-
-    mimages = []
-
-
-    generator = torch.Generator(device="cuda")
-
-    subfolder = os.path.join(img_directory, name)
-    if not os.path.exists(subfolder):
-        os.makedirs(subfolder)
-
-
-    logging.set_verbosity(logging.ERROR)
-
-    base.set_progress_bar_config(disable = True)
-    refiner.set_progress_bar_config(disable = True)
-
-    pbar = tqdm(range(samples), desc="Generating images", total = samples)
-    for idx in pbar:
-
-        fname = os.path.join(subfolder,  "img_%05d.png" % idx)
-
-        if os.path.exists(fname) and not overwrite:
-            ## load image from file
-            image = Image.open(fname)
-            mimages.append(image)
-            continue
-
-
-        if use_wandb:
-            args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
-                    'fwd_quant_e': fwd_quant.exp, 'fwd_quant_m': fwd_quant.man, 'weight_quant_e': weight_quant.exp, 'weight_quant_m': weight_quant.man,
-                    'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
-                    'idx': idx, 'version': 6, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
-                    'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
-                    'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str, "abort_norm": abort_norm,
-                    'calc_mse': calc_mse, 'shift_options': shift_options, 'rounding': kwargs.get('activate_rounding', 'stochastic'),
-                    'stochastic_emb_mode': stochastic_emb_mode, 'stochastic_weights_freq': stochastic_weights_freq, 
-                    'intermediate_weight_quantization_man': intermediate_weight_quantization.man, 'intermediate_weight_quantization_exp': intermediate_weight_quantization.exp,
-                    'prolong': prolong}
-            
-            args.update(kwargs)
-
-            ##add kwargs to args
-            
-            wname = name + "_" + str(idx)
-
-            wandb_entry = wandb.init(project="qpipe", entity= 'dl-projects', name=wname, config=args)
-
-
-            if not calc_mse:
-                use_wandb = False
-        else:
-            wandb_entry = nullcontext()
-
-        with wandb_entry:
-            generator.manual_seed(idx)
-            base.unet.step_counter = 0
-
-            image = base(
-                prompt=pprompt,
-                negative_prompt=nprompt,
-                num_inference_steps=n_steps1,
-                denoising_end=high_noise_frac,
-                output_type="latent",
-                generator=generator,
-                height = height,
-                width = width,
-            ).images
-            refiner.unet.step_counter = base.unet.step_counter
-            image = refiner(
-                prompt=pprompt,
-                num_inference_steps=n_steps2,
-                denoising_start=high_noise_frac,
-                image=image,
-                generator=generator,
-                height = height,
-                width = width,
-            ).images[0]
-
-        
-
-        ## save the image
-            
-        with GuardMemOp() as g:
-            image.save(fname)
-
-        if clip_score and samples > 4:
-            mimages.append(image)
-
-    # if samples > 1:
-
-    #     title = name.split("_g_")[0]
-    #     title = title.replace("_", " ")
-    #     if repeat_module < 0:
-    #         title = title + " $\gamma= " + "{:.0e}$".format(gamma_threshold)
-    #     plot_grid(name, mimages, title = title)
-
-    if clip_score and samples > 4:
-
-        args= {'prompt': pprompt, 'negative_prompt': nprompt, 'num_inference_steps': n_steps, 'denoising_end': high_noise_frac, 
-                'fwd_quant_e': fwd_quant.exp, 'fwd_quant_m': fwd_quant.man, 'weight_quant_e': weight_quant.exp, 'weight_quant_m': weight_quant.man,
-                'weight_flex_bias': weight_flex_bias, 'dtype': dtype, 'repeat_module': repeat_module, 'repeat_model': repeat_model,
-                'idx': idx, 'version': 6, 'layer_stats': layer_stats, 'individual_care': individual_care, 'inspection': inspection,
-                'gamma_threshold': gamma_threshold, 'quantized_run': quantized_run, "adjusted steps": n_steps1,
-                'scheduler_noise_mode': scheduler_noise_mode, "include": include, "quantization_noise": quantization_noise_str,
-                'shift_options': shift_options}
-        
-        args.update(kwargs)
-
-        ##add kwargs to args
-        
-        wname = name + "_" + str(idx)
-
-        ##delete all model to free memory
-        del base
-        del refiner
-        
-        torch.cuda.empty_cache()
-
-            
-        with wandb.init(project="qpipe_scores", entity= 'dl-projects', name=name, config=args):
-
-            splits = 16 if len(mimages) > 64 else 4
-            IS_mean, IS_std = inception_score(mimages, splits = splits) 
-
-            clip_score_mean, clip_score_mean_std  = clip_eval_std(mimages, pprompt, splits = splits)
-            clip_score_large_mean, clip_score_large_std  = clip_eval_std(mimages, pprompt, splits = splits, type = "large")
-            pickapick_mean, pickapick_std = eval_pickapick(subfolder, pprompt, batch_size=4)
-
-            wandb.log({'count': len(mimages),
-                        'clip_score_large': clip_score_large_mean,
-                        'clip_score_large_std': clip_score_large_std,
-                        'IS': IS_mean,
-                        'IS_std': IS_std,
-                        'clip_score_mean': clip_score_mean,
-                        'clip_score_mean_std': clip_score_mean_std,
-                        'pickapick': pickapick_mean,
-                        'pickapick_std': pickapick_std,
-                       })
-
-            print("CLIP score: ", clip_score_mean, "±", clip_score_mean_std)
-            print("CLIP score large: ", clip_score_large_mean, "±", clip_score_large_std)
-            print("Inception score: ", IS_mean, "±", IS_std)
-
-    return mimages
-
-def get_qnet(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
-              name_or_path_ref = "stabilityai/stable-diffusion-xl-refiner-1.0",
-              fwd_quant = FloatingPoint(8, 23),
-              weight_quant = FloatingPoint(8, 23),
-              weight_flex_bias = False,
-              dtype = torch.float32,
-              repeat_module = 1,
-              repeat_model = 1,
-              **kwargs):
     
-    fwd_quant = parse_quant(fwd_quant)
-    weight_quant = parse_quant(weight_quant)
-
-    torch.cuda.empty_cache()
-    qargs = {'activate': fwd_quant}
-    ## add kwargs to qargs
-    qargs.update(kwargs)
-
-    base = DiffusionPipeline.from_pretrained(
-        name_or_path, torch_dtype=dtype, use_safetensors=True,
-        variant = "fp16" if dtype == torch.float16 else None, 
-    )
-    base.to("cuda")
-
-    unet = QUNet2DConditionModel.from_unet(base.unet, weight_quant,  weight_flex_bias, qargs, repeat_module, repeat_model)
-    del base
-
-    return unet
+    return base, refiner, n_steps1, n_steps2, name
 
 
+
+
+import torch
+from PIL import Image
+from T2IBenchmark import T2IModelWrapper
+from kandinsky2 import get_kandinsky2
+
+def parse_resolution(resolution):
+    if resolution is None or resolution == "":
+        return 1024, 1024
+    elif ":" not in resolution:
+        return int(resolution), int(resolution)        
+
+    return tuple(map(int, resolution.split(":")))
+
+class QPIPE(T2IModelWrapper):
+    
+    def load_model(self, device, save_dir="misc_generation", use_saved_images=True, seed=0):
+        args = parser.parse_args()
+
+        base_dir = "FID_images"
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+
+        self.save_dir = os.path.join(base_dir, args.dir_name)
+        self.use_saved_images = use_saved_images
+        self.seed = seed
+
+        if args.weight_quant is None:
+            args.weight_quant = args.fwd_quant
+
+        if args.plus_bits_for_stochastic_weights != 0:
+
+            if args.plus_bits_for_stochastic_weights < 0:
+                man = 23
+                exp = 8
+            else:
+                weight_quant = parse_quant(args.weight_quant)
+                man = weight_quant.man + args.plus_bits_for_stochastic_weights
+                exp = weight_quant.exp
+
+            args.intermediate_weight_quantization = f"M{man}E{exp}"
+            args.stochastic_weights_freq = 1
+            args.STEM = 4
+
+        if args.mse:
+            assert args.repeat_model > 1
+
+        if args.STEM > 0:
+            args.stem = args.STEM + 4
+
+        if args.doubleT != 1 and args.quantization_noise == "none":
+            args.quantization_noise = "zero"
+
+
+        torch.cuda.set_device(device)
+
+        kwargs = {"quantization_noise": args.quantization_noise, "gamma_threshold": args.gamma_threshold, "quantized_run": not args.sim}
+
+        if args.noSR:
+            kwargs["activate_rounding"] = "nearest"
+
+        height, width = parse_resolution(args.resolution)
+
+        if args.deterministic:
+            ## make everything deterministic
+            torch.manual_seed(0)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+
+        self.args = args
+        self.kwargs = kwargs
+        self.n_steps = args.n_steps
+        self.height = height
+        self.width = width
+
+        """Initialize model here"""
+        kwargs = self.kwargs
+        args = self.args
+        n_steps = self.n_steps
+
+        self.base, self.refiner, self.n_steps1, self.n_steps2, self.name = get_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
+                        fwd_quant = args.fwd_quant, flex_bias = args.flex_bias, 
+                        samples=args.samples, n_steps = n_steps, name = args.name,
+                        repeat_module = args.repeat_module, repeat_model = args.repeat_model, use_wandb=args.wandb,
+                        layer_stats = args.layer_stats, individual_care = args.individual_care, inspection = args.inspection,
+                        prompt = args.prompt, high_noise_frac = args.high_noise_frac,
+                        calc_mse= args.mse, overwrite = args.overwrite,
+                        height = self.height, width = self.width, include = args.include,
+                        scheduler_noise_mode=args.scheduler_noise_mode,
+                        img_directory = args.img_directory, clip_score= args.eval, abort_norm = args.abort_norm,
+                        shift_options = args.shift_options, stochastic_emb_mode= args.stem, 
+                        stochastic_weights_freq = args.stochastic_weights_freq, 
+                        intermediate_weight_quantization = args.intermediate_weight_quantization,
+                        dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
+                        doubleT = args.doubleT, adjustBN = args.bn, qstep = args.qstep,
+                        **kwargs)
+        
+        self.high_noise_frac = args.high_noise_frac
+
+        self.generator = torch.Generator(device="cuda")
+
+        self.name = "MSCOCO_FID_" + self.name
+
+        self.generator.manual_seed(seed)
+        self.base.set_progress_bar_config(disable = True)
+        self.refiner.set_progress_bar_config(disable = True)
+
+    def generate(self, caption: str) -> Image.Image:
+        """Generate PIL image for provided caption"""
+        image = self.base(
+            prompt=caption,
+            num_inference_steps=self.n_steps1,
+            generator=self.generator,
+            denoising_end=self.high_noise_frac,
+            output_type="latent",
+            height = self.height,
+            width = self.width,
+        ).images
+        image = self.refiner(
+            prompt=caption,
+            num_inference_steps=self.n_steps2,
+            generator=self.generator,
+            denoising_start=self.high_noise_frac,
+            image=image,
+            height = self.height,
+            width = self.width,
+        ).images[0]
+
+        return image
+    
+if __name__ == "__main__":
+
+
+    fid, fid_data = calculate_coco_fid(
+    QPIPE,
+    device='cuda:0',
+    save_generations_dir="misc_generation",
+)
