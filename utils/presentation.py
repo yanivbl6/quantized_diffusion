@@ -201,10 +201,10 @@ def plot_hybrid_grid(name, runs, idxes=0,directory = "images", per_page = None, 
 
 def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3, name = None,
                  display_mse = False, display_is = False,  display_ssim = False,
-                 repeat_baseline = True, titles = None):
+                 repeat_baseline = True, titles = None, is_jpeg = False):
 
     beginning = runs[0].split("/")[1].split("_")[0]
-    name = beginning + (("_" + name) if name is not None else beginning)
+    ##name = beginning + (("_" + name) if name is not None else beginning)
 
     if titles is None:
         titles = [run.split("/")[-1] for run in runs]
@@ -230,14 +230,14 @@ def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3
         assert os.path.exists(runs[i]), "Invalid run directory: " + runs[i]
 
 
-
-    images = from_dirs(runs, [idxes[0]], type = "cv2")
+    type = "cv2" if not is_jpeg else "jpeg_cv2"
+    images = from_dirs(runs, [idxes[0]], type = type)
 
     if display_mse:
-        mses = eval_mse(runs=runs, idxes=idxes, baseline=0)
+        mses = eval_mse(runs=runs, idxes=idxes, baseline=0, is_jpeg = is_jpeg)
     
     if display_ssim:
-        ssim = eval_mse(runs=runs, idxes=idxes, baseline=0, fn_desc = "ssim+")
+        ssim = eval_mse(runs=runs, idxes=idxes, baseline=0, fn_desc = "ssim+", is_jpeg = is_jpeg)
 
     if not os.path.exists(vid_dir):
         os.makedirs(vid_dir)
@@ -251,14 +251,11 @@ def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3
     for j,idx in enumerate(idxes):
 
         if display_is:
-            images_png = from_dirs(runs, [idx], type = "png")
+            images_png = from_dirs(runs, [idx], type = type)
             is_scores = [inception_score([img],1)[0] - 1.0 for img in images_png]
             del images_png
         
-        images = from_dirs(runs, [idx], type = "cv2")
-
-
-
+        images = from_dirs(runs, [idx], type = "cv2" if not is_jpeg else "jpeg_cv2")
 
         if repeat_baseline:
             image_indxes = []
@@ -272,7 +269,10 @@ def create_video(runs, idxes, directory="images", vid_dir = "video", seconds = 3
             # Convert the image from BGR to RGB color format (This step is needed if the image is read using cv2.imread())
             
             image = images[i]
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            if not is_jpeg:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)                
+
             title = titles[i]
             cv2.putText(image, title, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
             if display_mse:

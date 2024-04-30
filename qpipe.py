@@ -165,7 +165,7 @@ def base_name(
     if dtype == torch.float32:
         name += "_fp32"
 
-    if caption_start >= 0:
+    if caption_start >= 0 and prompt == "coco":
         name += "_from_" + str(caption_start) + "_to_" + str(caption_start + samples)
 
     return name
@@ -253,16 +253,32 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
     quantize_embedding, quantize_first, quantize_last = parse_include(include)
 
 
+    if prompt == "sd":
 
-    if prompt != "coco":
-        pprompt, nprompt = get_prompt(prompt)
-        coco_mode = False
-    else:
+        from datasets import load_dataset
+        # Load the dataset
+        dataset = load_dataset('Gustavosta/Stable-Diffusion-Prompts')
+        # Get the first prompt
+        captions = [x['Prompt'] for x in dataset['train']]
+        img_idx = list(range(len(captions)))
+        nprompt = None
+        coco_mode = True
+
+    elif prompt == "coco":
         from T2IBenchmark.datasets import get_coco_30k_captions
         captions = list(get_coco_30k_captions().values())
         img_idx = list(get_coco_30k_captions().keys())
         nprompt = None
         coco_mode = True
+
+    else:
+        pprompt, nprompt = get_prompt(prompt)
+        coco_mode = False
+        
+
+
+
+
         
     quantization_noise_str = quantization_noise
 
@@ -467,7 +483,10 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
             wandb_entry = nullcontext()
 
         with wandb_entry:
-            if coco_mode:
+            if prompt == "sd":
+                pprompt = captions[idx]
+                generator.manual_seed(idx)
+            elif coco_mode:
                 pprompt = captions[idx]
                 generator.manual_seed(42)
             else:

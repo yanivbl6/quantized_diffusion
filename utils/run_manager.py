@@ -16,8 +16,10 @@ def check_directories(runs, n_images):
             flag = False
             continue
         png_files = glob.glob(f"{directory}/*.png")
-        if not (len(png_files) >= n_images):
-            print(f"Directory {directory} has only {len(png_files)}/{n_images} PNG images")
+        jpeg_files = glob.glob(f"{directory}/*.jpeg")
+        total_files = max(len(png_files), len(jpeg_files))
+        if not (total_files >= n_images):
+            print(f"Directory {directory} has only {total_files}/{n_images} PNG images")
             flag = False
 
     return flag
@@ -65,8 +67,10 @@ def get_flags_for_experiment(experiment):
         return {"embedding": True, "stem": True, "STEM": True,  "adjusted": True}
     elif experiment == "Wsr":
         return {"embedding": True, "Wsr": True}
+    elif experiment == "Wsr+nosr":
+        return {"embedding": True, "Wsr": True, "nosr": True}
     elif experiment == "Wsr4":
-        return {"embedding": True, "Wsr4": True}
+        return {"embedding": True, "Wsr4": True, "nosr": True}
     elif experiment == "traditional":
         return {"traditional": True}
     elif experiment == "extended":
@@ -77,6 +81,8 @@ def get_flags_for_experiment(experiment):
         return {"embedding": True, "nosr": True, "extended": True, "x4": True}
     elif experiment == "repeated4":
         return {"embedding": True, "nosr": True, "extended": True, "repeated": True, "x4": True}
+    elif experiment == "staticBias":
+        return {"embedding": True, "no_flex": True, "nosr": True, "no_vanilla": True}
     else:
         raise ValueError(f"Unknown experiment: {experiment}, must be one of {list_experiments()}")
 
@@ -84,14 +90,15 @@ def list_experiments():
     return ["adjusted_emb",  "emb","adjusted_flex", "all", "pre", "flex", "shift1", 
             "expexp", "variants", "ablation", "QN", "sr","nearest",
             "stem", "stem_emb", "partial", "desperate1", "stoch_w", "stoch_w_adj", 
-            "Wsr", "traditional", "extended", "repeated","repeated4", "Wsr4"]
+            "Wsr", "traditional", "extended", "repeated","repeated4", "Wsr4", "staticBias", "Wsr+nosr"]
 
 def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline = True, directory = "images", check_for = 0, experiment_flags = None,
                        baseline = True, adjusted = False, embedding = False, no_flex = False, first = False, flex = False, 
                        shift1 = False, expexp = False, ablation = False, exact = False, nosr = False, stem = False, STEM=   False,
                        Qfractions = False, partialQ = False, stochastic_weights = False, Wsr = False, plus = -1,  customs = [], extended = False , 
-                       x3 = False , x4 = False, ceil = False, traditional = False, repeated = False, Wsr4 = False):
+                       x3 = False , x4 = False, ceil = False, traditional = False, repeated = False, Wsr4 = False, no_vanilla= False):
     
+
     if experiment_flags is not None:
 
         if isinstance(experiment_flags, str):
@@ -127,8 +134,13 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_nearest_ceil')
             row_names.append(f"vanilla ceil")
     if no_flex:
-        runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_staticBias')
-        row_names.append(f"SR no flex, no emb")
+        if nosr:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_staticBias_nearest')
+            row_names.append(f"no flex")
+        else:
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_staticBias')
+            row_names.append(f"SR no flex")
+
     if flex:
         runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_noemb')
         row_names.append(f"SR no emb")
@@ -137,7 +149,8 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
     if adjusted and flex:
         runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_flex_adjusted')
         row_names.append(f"SR adjusted no emb")
-    if embedding:
+
+    if embedding and not no_vanilla:
         runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}')
         row_names.append(f"SR")
 
@@ -241,9 +254,8 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
         if plus >= 4:
             runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M8E3')
             row_names.append(f"+4")
-
         if plus >= 6:
-            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr')
+            runs.append(f'{directory}/{prompt}x{n_steps}_{experiment}_Wsr_M10E3')
             row_names.append(f"+6")
 
     if Wsr4:
@@ -362,7 +374,7 @@ def to_pd(results_dict, results_dict_steps,  col_names):
 
 def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "morgana2", images_per_run = 64,  directory = "images" ,experiment_flags = "ablation", 
                 dry = False, quiet = False, fp32_baseline = True, plus = -1, with_margin = False,
-                pvals = [], customs = []):
+                pvals = [], customs = [], merge = False):
     
     
 
@@ -374,7 +386,7 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
 
     if not dry:
         have_everything = get_results(experiments=experiments, steps=steps, prompts=prompts, images_per_run=images_per_run, directory=directory, experiment_flags=experiment_flags,
-                    dry=True, quiet=True, fp32_baseline=fp32_baseline, plus=plus, pvals=pvals, customs = customs)
+                    dry=True, quiet=True, fp32_baseline=fp32_baseline, plus=plus, pvals=pvals, customs = customs, merge = merge)
         assert have_everything, "Some directories are missing"
 
     results_dict_ssim = {}
@@ -384,52 +396,98 @@ def get_results(experiments = ["M4E3","M3E4"], steps = [400,800], prompts = "mor
 
     success = True
 
-    for prompt in prompts:
-        for experiment in experiments:
-            if len(prompts) > 1:
-                prompt_and_experiment = prompt + " " + experiment
-            else:
-                prompt_and_experiment = experiment
-            results_dict_ssim[prompt_and_experiment] = {}
-            results_dict_ssim_std[prompt_and_experiment] = {}
-            results_dict_steps[prompt_and_experiment] = []
-            for n_steps in steps:
-                runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, prompt = prompt, 
-                                                     fp32_baseline = fp32_baseline, plus = plus, customs = customs,
-                                                     experiment_flags= experiment_flags)
-                if check_directories(runs, images_per_run):
-                    if not quiet:
-                        print(f"Experiment: {experiment}, n_steps: {n_steps}")
-                    if dry:
-                        continue
-                    ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim", stop = True)
+    pbar = tqdm(total = len(prompts)*len(experiments)*len(steps), desc="Computing SSIM" if dry else "Checking Folders", leave = True)
 
-                    ssim = ssim[0,:]
-                    std = std[0,:]
 
-                    for k in range(len(row_names)):
-                        if row_names[k] not in results_dict_ssim[prompt_and_experiment]:
-                            results_dict_ssim[prompt_and_experiment][row_names[k]] = []
-                            results_dict_ssim_std[prompt_and_experiment][row_names[k]] = []
-                        results_dict_ssim[prompt_and_experiment][row_names[k]] += [ssim[k]]
-                        results_dict_ssim_std[prompt_and_experiment][row_names[k]] += [std[k]]
+    merge_dict = {}
 
-                    for u,v in pvals:
-                        p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim")
-                        p_row_name = f"Pval({row_names[u]} > {row_names[v]})"
-                        row_names.append(p_row_name)
-                        if p_row_name not in results_dict_ssim[prompt_and_experiment]:
-                            results_dict_ssim[prompt_and_experiment][p_row_name] = []
-                            results_dict_ssim_std[prompt_and_experiment][p_row_name] = []
-                        results_dict_ssim[prompt_and_experiment][p_row_name] += [p]
-                        results_dict_ssim_std[prompt_and_experiment][p_row_name] += [0]
-
-                    results_dict_steps[prompt_and_experiment] += [n_steps]
+    with pbar:
+        for prompt in prompts:
+            for experiment in experiments:
+                if len(prompts) > 1:
+                    prompt_and_experiment = prompt + " " + experiment
+                    if merge:
+                        if not experiment in merge_dict:
+                            merge_dict[experiment] = []
+                        merge_dict[experiment].append(prompt_and_experiment)
                 else:
-                    success = False
+                    prompt_and_experiment = experiment
+                        
 
+                results_dict_ssim[prompt_and_experiment] = {}
+                results_dict_ssim_std[prompt_and_experiment] = {}
+                results_dict_steps[prompt_and_experiment] = []
+                for n_steps in steps:
+
+                    pbar.update(1)
+
+                    runs, row_names = get_runs_and_names(experiment, n_steps, directory=directory, prompt = prompt, 
+                                                        fp32_baseline = fp32_baseline, plus = plus, customs = customs,
+                                                        experiment_flags= experiment_flags)
+                    
+
+                    if check_directories(runs, images_per_run):
+                        if not quiet:
+                            print(f"Experiment: {experiment}, n_steps: {n_steps}")
+                        if dry:
+                            continue
+
+                        ssim, std = eval_mse_matrix(runs, images_per_run, fn_desc = "ssim", stop = True)
+
+                        ssim = ssim[0,:]
+                        std = std[0,:]
+
+                        for k in range(len(row_names)):
+                            if row_names[k] not in results_dict_ssim[prompt_and_experiment]:
+                                results_dict_ssim[prompt_and_experiment][row_names[k]] = []
+                                results_dict_ssim_std[prompt_and_experiment][row_names[k]] = []
+
+                            results_dict_ssim[prompt_and_experiment][row_names[k]] += [ssim[k]]
+                            results_dict_ssim_std[prompt_and_experiment][row_names[k]] += [std[k]]
+
+                        for u,v in pvals:
+                            p = eval_mse_pval(runs[0],runs[u], runs[v], images_per_run  ,  fn_desc = "ssim")
+                            p_row_name = f"Pval({row_names[u]} > {row_names[v]})"
+                            row_names.append(p_row_name)
+                            if p_row_name not in results_dict_ssim[prompt_and_experiment]:
+                                results_dict_ssim[prompt_and_experiment][p_row_name] = []
+                                results_dict_ssim_std[prompt_and_experiment][p_row_name] = []
+                            results_dict_ssim[prompt_and_experiment][p_row_name] += [p]
+                            results_dict_ssim_std[prompt_and_experiment][p_row_name] += [0]
+
+                        results_dict_steps[prompt_and_experiment] += [n_steps]
+                    else:
+                        success = False
+        
     if dry:
         return success
+
+    if merge:
+        for row_name in row_names:
+            for merge_to, merge_from_list in merge_dict.items():
+
+                if merge_to not in results_dict_ssim:
+                    results_dict_ssim[merge_to] = {}
+                    results_dict_ssim_std[merge_to] = {}
+                    results_dict_steps[merge_to] = results_dict_steps[merge_from_list[0]]
+
+                k = len(merge_from_list)
+                results_dict_ssim[merge_to][row_name] = np.zeros((k,len(results_dict_ssim[merge_from_list[0]][row_name])))
+                results_dict_ssim_std[merge_to][row_name] = np.zeros((k,len(results_dict_ssim_std[merge_from_list[0]][row_name])))
+                for i,merge_from in enumerate(merge_from_list):
+                    results_dict_ssim[merge_to][row_name][i,:] = np.asarray(results_dict_ssim[merge_from][row_name])
+                    results_dict_ssim_std[merge_to][row_name][i,:] = np.asarray(results_dict_ssim_std[merge_from][row_name])
+
+                results_dict_ssim[merge_to][row_name] = list(np.mean(results_dict_ssim[merge_to][row_name], axis = 0))
+                results_dict_ssim_std[merge_to][row_name] = list(np.mean(results_dict_ssim_std[merge_to][row_name], axis = 0))
+
+        ## Remove the merged experiments
+        for merge_from_list in merge_dict.values():
+            for merge_from in merge_from_list:
+                del results_dict_ssim[merge_from]
+                del results_dict_ssim_std[merge_from]
+                del results_dict_steps[merge_from]
+
 
     df = to_pd(results_dict_ssim, results_dict_steps, row_names)
 

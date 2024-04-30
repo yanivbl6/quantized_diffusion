@@ -41,7 +41,14 @@ def from_dir(directory):
 
 def from_dirs(directories, idxes, type = "png"):
     images = []
-    img_names = ["img_%05d.png" % idx for idx in idxes]
+    if type == "jpeg" or type == "jpev_cv2":
+        from T2IBenchmark.datasets import get_coco_30k_captions
+
+        img_idx = list(get_coco_30k_captions().keys())
+        ##  fname = os.path.join(subfolder, "%d.jpeg" % img_idx[idx])
+        img_names = ["%d.jpeg" % img_idx[idx] for idx in idxes]
+    else:
+        img_names = ["img_%05d.png" % idx for idx in idxes]
 
     for directory in directories:
         for img_name in img_names:
@@ -49,7 +56,9 @@ def from_dirs(directories, idxes, type = "png"):
             if os.path.exists(img_path):
                 if type == "png":
                     img = Image.open(img_path)
-                elif type == "cv2":
+                elif type == "jpeg":
+                    img = Image.open(img_path)
+                elif type == "cv2" or type == "jpeg_cv2":
                     img = cv2.imread(img_path)
                 elif type == "torch":
                     img = ToTensor()(Image.open(img_path))
@@ -125,10 +134,10 @@ def get_fn_from_desc(fn_desc):
     return fn
 
 @memory.cache
-def eval_mse(runs = None, idxes = None, baseline = 0, fn_desc = None):
+def eval_mse(runs = None, idxes = None, baseline = 0, fn_desc = None, is_jpeg = False):
         
         ## must have either images and cols or runs and idxes
-        images = from_dirs(runs, idxes)
+        images = from_dirs(runs, idxes, type = 'png' if not is_jpeg else 'jpeg')
         cols = len(idxes)
 
         return eval_mse_imgs(images, cols, baseline, fn_desc)
@@ -223,7 +232,10 @@ def eval_mse_matrix(runs, idxes, fn_desc = None, stop = False):
     if isinstance(idxes, int):
         idxes = list(range(idxes))
 
-    images = from_dirs(runs, idxes)
+    format = "png" if not "coco" in runs[0] else "jpeg"
+    images = from_dirs(runs, idxes, type = format)
+
+
     cols = len(idxes)
     rows = len(runs)
 
@@ -392,7 +404,10 @@ def inception_score(images, batch_size=32, resize=False, splits=1):
             scores.append(entropy(pyx, py))
         split_scores.append(np.exp(np.mean(scores)))
 
-    return np.mean(split_scores), np.std(split_scores)
+    if splits > 1:
+        return np.mean(split_scores), np.std(split_scores)
+    else:
+        return np.mean(split_scores), 0
 
 def make_tmp_folder(idx = 0):
     name = f"/tmp/eval{idx}"
