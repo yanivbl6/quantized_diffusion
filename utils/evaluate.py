@@ -22,6 +22,7 @@ from joblib import Memory
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import retrieve_latents
 from diffusers import DiffusionPipeline
 from skimage.metrics import structural_similarity
+from pytorch_msssim import ssim
 
 memory = Memory(location="/tmp/mem2", verbose=0)
 ##memory = Memory(location=None, verbose=0)
@@ -39,12 +40,9 @@ def from_dir(directory):
 
     return images
 
-def from_dirs(directories, idxes, type = "png"):
+def from_dirs(directories, idxes, type = "png",img_idx = None):
     images = []
     if type == "jpeg" or type == "jpev_cv2":
-        from T2IBenchmark.datasets import get_coco_30k_captions
-
-        img_idx = list(get_coco_30k_captions().keys())
         ##  fname = os.path.join(subfolder, "%d.jpeg" % img_idx[idx])
         img_names = ["%d.jpeg" % img_idx[idx] for idx in idxes]
     else:
@@ -130,7 +128,11 @@ def get_fn_from_desc(fn_desc):
         ##fn = lambda x,y: 1-compare_ssim(x.transpose((1, 2, 0)), y.transpose((1, 2, 0)))
         fn = lambda x,y: structural_similarity(x,y,channel_axis = 2)
     elif fn_desc == "ssim+":
-        fn = lambda x,y: structural_similarity(x,y,channel_axis = 2)
+        transform = transforms.ToTensor()
+        fn = lambda x,y: ssim(transform(x).unsqueeze(0).cuda(), transform(y).unsqueeze(0).cuda(), data_range=1.0).detach().cpu().numpy()
+    elif fn_desc == "psnr":
+        fn = lambda x,y: cv2.PSNR(x, y)
+    
     return fn
 
 @memory.cache
@@ -232,8 +234,17 @@ def eval_mse_matrix(runs, idxes, fn_desc = None, stop = False):
     if isinstance(idxes, int):
         idxes = list(range(idxes))
 
-    format = "png" if not "coco" in runs[0] else "jpeg"
-    images = from_dirs(runs, idxes, type = format)
+    format = "png" 
+
+    if "coco" in runs[0]:
+        from T2IBenchmark.datasets import get_coco_30k_captions
+        format = "jpeg"
+        img_idx = list(get_coco_30k_captions().keys())
+    elif "sdx" in runs[0]:
+        format = "jpeg"
+        img_idx = idxes
+
+    images = from_dirs(runs, idxes, type = format, img_idx = img_idx)
 
 
     cols = len(idxes)

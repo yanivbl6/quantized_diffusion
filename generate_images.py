@@ -80,6 +80,12 @@ parser.add_argument('--qstep', type=int, default=-1)
 
 parser.add_argument('--caption_start', type=int, default=-1)
 
+parser.add_argument('--guidance_scale', type=float, default=None)
+
+parser.add_argument('--eta', type=float, default=None)
+parser.add_argument('--scheduler', type=str, default=None)
+
+
 ##main
 
 def parse_resolution(resolution):
@@ -148,6 +154,9 @@ if __name__ == "__main__":
         all_steps = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
     elif args.n_steps == -3:
         all_steps = [20, 40, 60, 80, 120, 140, 160, 180, 200]
+    elif args.n_steps < -10:
+        all_steps = [-args.n_steps, 220 + args.n_steps]
+
 
     for n_steps in all_steps:
         image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
@@ -165,6 +174,7 @@ if __name__ == "__main__":
                         intermediate_weight_quantization = args.intermediate_weight_quantization,
                         dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
                         doubleT = args.doubleT, adjustBN = args.bn, qstep = args.qstep, caption_start = args.caption_start,
+                        guidance_scale = args.guidance_scale, eta = args.eta, scheduler = args.scheduler,
                         **kwargs)
         
         torch.cuda.empty_cache()

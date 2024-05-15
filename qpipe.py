@@ -1,4 +1,4 @@
-from diffusers import DiffusionPipeline, logging
+from diffusers import DiffusionPipeline, logging, DDIMScheduler, UniPCMultistepScheduler, HeunDiscreteScheduler
 import torch
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -85,10 +85,28 @@ def base_name(
     qstep: int = -1,
     caption_start: int = -1,
     samples: int = 1,
+    resolution: Tuple[int, int] = (1024, 1024),
+    guidance_scale: float = None,
+    eta: float = None,
+    scheduler: str = None,
     **kwargs,
 ) -> str:
     
     name = name + prompt + "x" + str(steps) + "_"
+
+    if guidance_scale is not None:
+        name += "gscale_%d_" % int(guidance_scale)
+
+    if eta is not None:
+        if eta == 1.0:
+            name += "DDPM_"
+        elif eta == 0.0:
+            name += "DDIM_"
+        else:
+            name += "eta_%d_" % int(eta*100)
+
+    if scheduler is not None:
+        name += scheduler + "_"
 
     if fwd_quant == weight_quant:
         name = name +  fwd_quant
@@ -168,6 +186,11 @@ def base_name(
     if caption_start >= 0 and prompt == "coco":
         name += "_from_" + str(caption_start) + "_to_" + str(caption_start + samples)
 
+    if resolution != (1024, 1024):
+        name += "_%dx%d" % resolution
+
+
+
     return name
 
 
@@ -246,6 +269,9 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
               adjustBN = 0.0,
               qstep = -1,
               caption_start = -1,
+              guidance_scale = None,
+              eta = None,
+              scheduler = None,
               **kwargs):
     
 
@@ -288,7 +314,9 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                          individual_care, gamma_threshold, quantization_noise_str, name,  
                          prompt, n_steps, include, scheduler_noise_mode, calc_mse, shift_options, stochastic_emb_mode,
                          stochastic_weights_freq, intermediate_weight_quantization, dtype = dtype , prolong = prolong, 
-                         doubleT = doubleT, adjustBN= adjustBN, qstep = qstep, caption_start =caption_start , samples= samples, **kwargs) 
+                         doubleT = doubleT, adjustBN= adjustBN, qstep = qstep, caption_start =caption_start , samples= samples, 
+                         resolution = (height, width), guidance_scale = guidance_scale, eta = eta, scheduler = scheduler, **kwargs)
+                        
 
     if caption_start < 0:
         caption_start = 0
@@ -364,8 +392,14 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                         repeat_times= 1)
         
         base.scheduler.set_timesteps(n_steps)
-
-
+    elif scheduler is not None:
+        if scheduler == "UniPC":
+            base.scheduler = UniPCMultistepScheduler.from_config(base.scheduler.config)
+        elif scheduler == "Heun":
+            base.scheduler = HeunDiscreteScheduler()
+        else:
+            raise ValueError("Invalid scheduler")
+        
     n_steps1 = n_steps
     
     timestep_to_repetition1 = None
@@ -408,8 +442,14 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                                             repeat_times= doubleT)
 
         refiner.scheduler.set_timesteps(n_steps2)
-
-    
+    elif scheduler is not None:
+        if scheduler == "UniPC":
+            refiner.scheduler = UniPCMultistepScheduler.from_config(refiner.scheduler.config)
+        elif scheduler == "Heun":
+            base.scheduler = HeunDiscreteScheduler()
+        else:
+            raise ValueError("Invalid scheduler")
+        
     timestep_to_repetition2 = None
 
     refiner.unet = QUNet2DConditionModel.from_unet(refiner.unet, weight_quant, weight_flex_bias, qargs, 
@@ -420,6 +460,16 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                                                     stochastic_weights_freq = stochastic_weights_freq,
                                                     intermediate_weight_quantization = intermediate_weight_quantization,
                                                     adjustBN_scalar = adjustBN, qstep = qstep)
+
+    kwargs = {}
+    kwargs2 = {}
+
+    if guidance_scale is not None:
+        kwargs['guidance_scale'] = guidance_scale
+
+    if eta is not None:
+        kwargs['eta'] = eta
+        kwargs2['eta'] = eta
 
     idx = 0
 
@@ -437,10 +487,12 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
 
     logging.set_verbosity(logging.ERROR)
 
-    base.set_progress_bar_config(disable = True)
-    refiner.set_progress_bar_config(disable = True)
+    if samples > 1:
+        base.set_progress_bar_config(disable = True)
+        refiner.set_progress_bar_config(disable = True)
 
     pbar = tqdm(range(caption_start,caption_start + samples), desc="Generating images", total = samples)
+
     for idx in pbar:
 
         if coco_mode:
@@ -503,7 +555,10 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                 generator=generator,
                 height = height,
                 width = width,
+                **kwargs
             ).images
+
+
             refiner.unet.step_counter = base.unet.step_counter
             image = refiner(
                 prompt=pprompt,
@@ -513,6 +568,7 @@ def run_qpipe(name_or_path = "stabilityai/stable-diffusion-xl-base-1.0",
                 generator=generator,
                 height = height,
                 width = width,
+                **kwargs2
             ).images[0]
 
         
