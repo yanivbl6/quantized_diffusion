@@ -190,6 +190,14 @@ def base_name(
         name += "_%dx%d" % resolution
 
 
+    ## replace "M23E8_StaticBias_fp32" with "_fp32"
+    name = name.replace("M23E8_StaticBias_fp32", "_fp32")
+    ## replace "M23E8_StaticBias" with "_fp16"
+    name = name.replace("M23E8_StaticBias", "_fp16")
+    ## replace "M7E8_StaticBias_fp32" with "_bf16"
+    name = name.replace("M7E8_StaticBias_fp32", "_bf16")
+    ## replace "M10E5_StaticBias_fp32" with "_qff16"
+    name = name.replace("M10E5_StaticBias_fp32", "_qff16")
 
     return name
 
