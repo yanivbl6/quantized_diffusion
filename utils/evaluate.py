@@ -273,8 +273,18 @@ def eval_mse_pval(baseline_run, sample1_run, sample2_run, idxes, fn_desc = None)
         idxes = list(range(idxes))
 
     runs = [baseline_run, sample1_run, sample2_run]
+    format = "png" 
 
-    images = from_dirs(runs, idxes)
+    if "coco" in runs[0]:
+        from T2IBenchmark.datasets import get_coco_30k_captions
+        format = "jpeg"
+        img_idx = list(get_coco_30k_captions().keys())
+    elif "sdx" in runs[0]:
+        format = "jpeg"
+        img_idx = idxes
+
+    images = from_dirs(runs, idxes, type = format, img_idx = img_idx)
+    
     cols = len(idxes)
 
     mses = eval_mse_imgs(images = images, cols = cols, baseline = 0, fn_desc = fn_desc)
