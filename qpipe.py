@@ -182,6 +182,8 @@ def base_name(
 
     if dtype == torch.float32:
         name += "_fp32"
+    elif dtype == torch.bfloat16:
+        name += "_bfloat16"
 
     if caption_start >= 0 and prompt == "coco":
         name += "_from_" + str(caption_start) + "_to_" + str(caption_start + samples)
@@ -193,6 +195,7 @@ def base_name(
     ## replace "M23E8_StaticBias_fp32" with "_fp32"
     name = name.replace("M23E8_staticBias_fp32", "fp32")
     ## replace "M23E8_StaticBias" with "_fp16"
+    name = name.replace("M23E8_staticBias_bfloat16", "bfloat16")
     name = name.replace("M23E8_staticBias", "fp16")
     ## replace "M7E8_StaticBias_fp32" with "_bf16"
     name = name.replace("M7E8_staticBias_fp32", "bf16")

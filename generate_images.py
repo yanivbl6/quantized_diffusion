@@ -67,6 +67,7 @@ parser.add_argument('--intermediate_weight_quantization', type=str, default="M23
 parser.add_argument('-p','--plus_bits_for_stochastic_weights', type=int, default=0)
 
 parser.add_argument('--fp32', action='store_true')
+parser.add_argument('--bf16', action='store_true')
 
 
 parser.add_argument('-x','--prolong', type=int, default=1)
@@ -157,6 +158,13 @@ if __name__ == "__main__":
     elif args.n_steps < -10:
         all_steps = [-args.n_steps, 220 + args.n_steps]
 
+    assert not (args.fp32 and args.bf16)
+    if args.bf16:
+        dtype = torch.bfloat16
+    else:
+        dtype = torch.float32 if args.fp32 else torch.float16
+
+
 
     for n_steps in all_steps:
         image = run_qpipe(weight_quant = args.weight_quant, weight_flex_bias = args.flex_bias, 
@@ -172,7 +180,7 @@ if __name__ == "__main__":
                         shift_options = args.shift_options, stochastic_emb_mode= args.stem, 
                         stochastic_weights_freq = args.stochastic_weights_freq, 
                         intermediate_weight_quantization = args.intermediate_weight_quantization,
-                        dtype = torch.float32 if args.fp32 else torch.float16, prolong= args.prolong,
+                        dtype = dtype, prolong= args.prolong,
                         doubleT = args.doubleT, adjustBN = args.bn, qstep = args.qstep, caption_start = args.caption_start,
                         guidance_scale = args.guidance_scale, eta = args.eta, scheduler = args.scheduler,
                         **kwargs)
