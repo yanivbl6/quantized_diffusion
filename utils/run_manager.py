@@ -122,19 +122,30 @@ def get_runs_and_names(experiment,  n_steps, prompt = "morgana2", fp32_baseline 
             runs.append(f'{directory}/{prompt}x{n_steps}{extension}_fp16')
             row_names.append("fp16")
 
+
     if experiment == "qfp16":
         runs.append(f'{directory}/{prompt}x{n_steps}{extension}_qfp16')
-        row_names.append("fp16_quantized")
+        row_names.append("fp16")
         return runs, row_names
     
     if experiment == "fp16":
         runs.append(f'{directory}/{prompt}x{n_steps}{extension}_fp16')
-        row_names.append("fp16")
+        row_names.append("fp16 (sim)")
         return runs, row_names
     
     if experiment == "bf16":
         runs.append(f'{directory}/{prompt}x{n_steps}{extension}_bf16')
+        row_names.append("bf16 (sim)")
+        return runs, row_names
+    
+    if experiment == "bfloat16":
+        runs.append(f'{directory}/{prompt}x{n_steps}{extension}_bfloat16')
         row_names.append("bf16")
+        return runs, row_names
+
+    if experiment == "WSR+4":
+        runs.append(f'{directory}/{prompt}x{n_steps}{extension}_M4E3_Wsr_M8E3')
+        row_names.append("WSR")
         return runs, row_names
 
     if traditional:
