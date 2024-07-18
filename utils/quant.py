@@ -191,8 +191,8 @@ class Quantizer(nn.Module):
                 else:
                     try:
                         c = torch.quantile(x.abs().flatten(), 0.99).item()
-                    except RuntimeError as e:
-                        print(f"Error in quantile, num elements: {elems}, error: {e}")
+                    except RuntimeError as errr:
+                        print(f"Error in quantile, num elements: {elems}, error: {errr}")
                         c = x.abs().max().item()
                         max_elems = elems
 
