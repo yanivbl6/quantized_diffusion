@@ -175,7 +175,7 @@ class Quantizer(nn.Module):
                 x_std = x.abs().flatten().std()            
                 clip_v = (x_std * 5 ).item()
                 c = x.abs().max().item()
-                if c > clip_v:
+                if c > clip_v and clip_v > 0:
                     c = clip_v
 
                 bhat = 2**(e-1) - log2(c) 
