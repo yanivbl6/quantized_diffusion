@@ -169,8 +169,13 @@ class Quantizer(nn.Module):
                 factor = 2**(torch.ceil((-torch.log2(c))))
             else:
                 m = self.forward_number.man
-                ##c = x.abs().max()/(2 - 2**(-m))
-                c = x.abs().max()
+
+                ##calculate c based on max
+                ## c = x.abs().max()
+                ## calculate c based on top-99 percentile
+                c = torch.quantile(x.abs().flatten(), 0.99)
+                
+
                 bhat = 2**(e-1) - log2(c) 
                 factor = 2**(ceil(bhat))
 
