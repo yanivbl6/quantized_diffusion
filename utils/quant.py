@@ -173,11 +173,10 @@ class Quantizer(nn.Module):
 
                 ## calculate c based on top-99 percentile
                 x_std = x.abs().flatten().std()            
-                clip_v = x_std * 5 
-                x = torch.clip(x, -clip_v, clip_v)
-
-                ##calculate c based on max
-                c = x.abs().max()
+                clip_v = (x_std * 5 ).item()
+                c = x.abs().max().item()
+                if c > clip_v:
+                    c = clip_v
 
                 bhat = 2**(e-1) - log2(c) 
                 factor = 2**(ceil(bhat))
