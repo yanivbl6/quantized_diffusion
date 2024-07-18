@@ -184,7 +184,7 @@ class Quantizer(nn.Module):
                 ##c = x.abs().max().item()
 
                 ## use p based on top-99 percentile
-                
+                global max_elems
                 elems = x.numel()
                 if elems >= max_elems:
                     c = x.abs().max().item()
