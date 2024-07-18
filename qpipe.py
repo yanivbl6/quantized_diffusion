@@ -202,7 +202,7 @@ def base_name(
     ## replace "M10E5_StaticBias_fp32" with "_qff16"
     name = name.replace("M10E5_staticBias_fp32", "qff16")
 
-    name = name + "_sig5"
+    name = name + "_p99_fallback"
     
     return name
 

@@ -113,6 +113,8 @@ class QAttnProcessor2_0:
         return hidden_states
 
 
+max_elems = 1e8
+
 class Quantizer(nn.Module):
     def __init__(
         self,
@@ -172,11 +174,27 @@ class Quantizer(nn.Module):
 
 
                 ## calculate c based on top-99 percentile
-                x_std = x.abs().flatten().std()            
-                clip_v = (x_std * 5 ).item() + x.abs().flatten().mean().item()
-                c = x.abs().max().item()
-                if c > clip_v and clip_v > 0:
-                    c = clip_v
+                # x_std = x.abs().flatten().std()            
+                # clip_v = (x_std * 5 ).item() + x.abs().flatten().mean().item()
+                # c = x.abs().max().item()
+                # if c > clip_v and clip_v > 0:
+                #     c = clip_v
+
+                ## use c based on max value
+                ##c = x.abs().max().item()
+
+                ## use p based on top-99 percentile
+                
+                elems = x.numel()
+                if elems >= max_elems:
+                    c = x.abs().max().item()
+                else:
+                    try:
+                        c = torch.quantile(x.abs().flatten(), 0.99).item()
+                    except RuntimeError as e:
+                        print(f"Error in quantile, num elements: {elems}, error: {e}")
+                        c = x.abs().max().item()
+                        max_elems = elems
 
                 bhat = 2**(e-1) - log2(c) 
                 factor = 2**(ceil(bhat))
