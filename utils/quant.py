@@ -173,7 +173,7 @@ class Quantizer(nn.Module):
 
                 ## calculate c based on top-99 percentile
                 x_std = x.abs().flatten().std()            
-                clip_v = (x_std * 5 ).item()
+                clip_v = (x_std * 5 ).item() + x.abs().flatten().mean().item()
                 c = x.abs().max().item()
                 if c > clip_v and clip_v > 0:
                     c = clip_v
