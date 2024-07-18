@@ -170,11 +170,14 @@ class Quantizer(nn.Module):
             else:
                 m = self.forward_number.man
 
-                ##calculate c based on max
-                ## c = x.abs().max()
+
                 ## calculate c based on top-99 percentile
-                c = torch.quantile(x.abs().flatten(), 0.99)
-                
+                x_std = x.abs().flatten().std()            
+                clip_v = x_std * 5 
+                x = torch.clip(x, -clip_v, clip_v)
+
+                ##calculate c based on max
+                c = x.abs().max()
 
                 bhat = 2**(e-1) - log2(c) 
                 factor = 2**(ceil(bhat))
